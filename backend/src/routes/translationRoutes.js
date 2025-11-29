@@ -17,4 +17,8 @@ router.post('/project/:projectId/batch-translate', translationController.batchGe
 router.post('/:id/approve', translationController.approveTranslation);
 router.post('/:id/reject', translationController.rejectTranslation);
 
+// Bulk operations
+router.post('/bulk/approve', translationController.bulkApproveTranslations);
+router.post('/bulk/reject', translationController.bulkRejectTranslations);
+
 module.exports = router;

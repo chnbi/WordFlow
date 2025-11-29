@@ -44,10 +44,11 @@ export default function ProjectDetails() {
 
   const createTextMutation = useMutation({
     mutationFn: (data) => translationAPI.create(data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries(['translations', projectId]);
       queryClient.invalidateQueries(['stats', projectId]);
-      toast.success('Content added successfully');
+      const message = response.data.message || 'Content added successfully';
+      toast.success(message);
       setShowAddText(false);
       setNewText({ page: '', section: '', elementType: 'heading', content: '' });
     },
@@ -208,27 +209,36 @@ export default function ProjectDetails() {
           </div>
         </div>
 
-        <div className="pt-4 border-t">
-          <h3 className="text-sm font-medium mb-3">Generate AI Translations</h3>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => handleGenerateTranslations('bm')}
-              className="btn btn-primary flex items-center space-x-2"
-              disabled={batchTranslateMutation.isPending}
-            >
-              <Play className="w-4 h-4" />
-              <span>Generate BM</span>
-            </button>
-            <button
-              onClick={() => handleGenerateTranslations('zh')}
-              className="btn btn-primary flex items-center space-x-2"
-              disabled={batchTranslateMutation.isPending}
-            >
-              <Play className="w-4 h-4" />
-              <span>Generate ZH</span>
-            </button>
+        {stats?.pendingItems > 0 && (
+          <div className="pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium">Need to regenerate translations?</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats.pendingItems} item(s) need translation
+                </p>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => handleGenerateTranslations('bm')}
+                  className="btn btn-secondary flex items-center space-x-2"
+                  disabled={batchTranslateMutation.isPending}
+                >
+                  <Play className="w-4 h-4" />
+                  <span>Regenerate BM</span>
+                </button>
+                <button
+                  onClick={() => handleGenerateTranslations('zh')}
+                  className="btn btn-secondary flex items-center space-x-2"
+                  disabled={batchTranslateMutation.isPending}
+                >
+                  <Play className="w-4 h-4" />
+                  <span>Regenerate ZH</span>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Add Text Modal */}

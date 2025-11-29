@@ -46,7 +46,8 @@ exports.createTranslation = async (req, res) => {
       section,
       elementType,
       elementName,
-      content
+      content,
+      autoTranslate = true // Auto-translate by default
     } = req.body;
 
     const translation = new Translation({
@@ -65,10 +66,53 @@ exports.createTranslation = async (req, res) => {
 
     await translation.save();
 
+    // Auto-generate translations for both languages
+    if (autoTranslate && content.en) {
+      try {
+        // Generate BM translation
+        const bmResult = await translationService.translateText(
+          content.en,
+          'en',
+          'bm',
+          'v1.0'
+        );
+
+        if (bmResult.success) {
+          translation.content.bm = bmResult.translation;
+        }
+
+        // Generate ZH translation
+        const zhResult = await translationService.translateText(
+          content.en,
+          'en',
+          'zh',
+          'v1.0'
+        );
+
+        if (zhResult.success) {
+          translation.content.zh = zhResult.translation;
+        }
+
+        // Merge glossary terms from both translations
+        const allGlossaryTerms = [
+          ...(bmResult.glossaryMatches || []),
+          ...(zhResult.glossaryMatches || [])
+        ];
+        translation.glossaryTerms = [...new Set(allGlossaryTerms)];
+
+        await translation.save();
+      } catch (error) {
+        console.error('Auto-translation error:', error);
+        // Continue even if auto-translation fails
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: translation,
-      message: 'Translation created successfully'
+      message: autoTranslate && translation.content.bm && translation.content.zh
+        ? 'Translation created and auto-translated successfully'
+        : 'Translation created successfully'
     });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
@@ -287,6 +331,67 @@ exports.deleteTranslation = async (req, res) => {
     res.json({
       success: true,
       message: 'Translation deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Bulk approve translations
+exports.bulkApproveTranslations = async (req, res) => {
+  try {
+    const { translationIds, reviewer } = req.body;
+
+    if (!translationIds || !Array.isArray(translationIds) || translationIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'translationIds array is required' });
+    }
+
+    const result = await Translation.updateMany(
+      { _id: { $in: translationIds } },
+      {
+        status: 'approved',
+        reviewer: reviewer || 'Marketing Team',
+        reviewedAt: new Date()
+      }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        modified: result.modifiedCount,
+        total: translationIds.length
+      },
+      message: `${result.modifiedCount} translation(s) approved`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Bulk reject translations
+exports.bulkRejectTranslations = async (req, res) => {
+  try {
+    const { translationIds, notes } = req.body;
+
+    if (!translationIds || !Array.isArray(translationIds) || translationIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'translationIds array is required' });
+    }
+
+    const result = await Translation.updateMany(
+      { _id: { $in: translationIds } },
+      {
+        status: 'rejected',
+        notes: notes || 'Rejected for review'
+      }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        modified: result.modifiedCount,
+        total: translationIds.length
+      },
+      message: `${result.modifiedCount} translation(s) rejected`
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

@@ -1,4 +1,5 @@
 const ocrService = require('../services/ocrService');
+const translationService = require('../services/translationService');
 const Translation = require('../models/Translation');
 const path = require('path');
 const fs = require('fs').promises;
@@ -59,6 +60,47 @@ exports.uploadImage = async (req, res) => {
 
     await translation.save();
 
+    // Auto-generate translations for both languages
+    if (ocrResult.text) {
+      try {
+        // Generate BM translation
+        const bmResult = await translationService.translateText(
+          ocrResult.text,
+          'en',
+          'bm',
+          'v1.0'
+        );
+
+        if (bmResult.success) {
+          translation.content.bm = bmResult.translation;
+        }
+
+        // Generate ZH translation
+        const zhResult = await translationService.translateText(
+          ocrResult.text,
+          'en',
+          'zh',
+          'v1.0'
+        );
+
+        if (zhResult.success) {
+          translation.content.zh = zhResult.translation;
+        }
+
+        // Merge glossary terms
+        const allGlossaryTerms = [
+          ...(bmResult.glossaryMatches || []),
+          ...(zhResult.glossaryMatches || [])
+        ];
+        translation.glossaryTerms = [...new Set(allGlossaryTerms)];
+
+        await translation.save();
+      } catch (error) {
+        console.error('Auto-translation error:', error);
+        // Continue even if auto-translation fails
+      }
+    }
+
     // Clean up uploaded file
     await fs.unlink(req.file.path);
 
@@ -72,7 +114,9 @@ exports.uploadImage = async (req, res) => {
           message: ocrResult.message
         }
       },
-      message: 'Image processed and text extracted successfully'
+      message: translation.content.bm && translation.content.zh
+        ? 'Image processed, text extracted, and auto-translated successfully'
+        : 'Image processed and text extracted successfully'
     });
   } catch (error) {
     // Clean up file if it exists

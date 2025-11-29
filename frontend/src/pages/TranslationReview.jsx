@@ -12,6 +12,7 @@ export default function TranslationReview() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [editingId, setEditingId] = useState(null);
   const [editedContent, setEditedContent] = useState({});
+  const [selectedItems, setSelectedItems] = useState([]);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -66,6 +67,32 @@ export default function TranslationReview() {
     }
   });
 
+  const bulkApproveMutation = useMutation({
+    mutationFn: (translationIds) => translationAPI.bulkApprove(translationIds, 'Marketing Team'),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['translations', projectId]);
+      queryClient.invalidateQueries(['stats', projectId]);
+      toast.success(response.data.message || 'Translations approved');
+      setSelectedItems([]);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'Bulk approval failed');
+    }
+  });
+
+  const bulkRejectMutation = useMutation({
+    mutationFn: (translationIds) => translationAPI.bulkReject(translationIds, 'Needs revision'),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['translations', projectId]);
+      queryClient.invalidateQueries(['stats', projectId]);
+      toast.success(response.data.message || 'Translations rejected');
+      setSelectedItems([]);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'Bulk rejection failed');
+    }
+  });
+
   const handleEdit = (item) => {
     setEditingId(item._id);
     setEditedContent({
@@ -76,6 +103,36 @@ export default function TranslationReview() {
 
   const handleSave = (id) => {
     updateMutation.mutate({ id, content: editedContent });
+  };
+
+  const toggleSelectItem = (id) => {
+    setSelectedItems(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.length === translations?.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(translations?.map(t => t._id) || []);
+    }
+  };
+
+  const handleBulkApprove = () => {
+    if (selectedItems.length === 0) {
+      toast.error('No items selected');
+      return;
+    }
+    bulkApproveMutation.mutate(selectedItems);
+  };
+
+  const handleBulkReject = () => {
+    if (selectedItems.length === 0) {
+      toast.error('No items selected');
+      return;
+    }
+    bulkRejectMutation.mutate(selectedItems);
   };
 
   const highlightGlossary = (text, terms) => {
@@ -111,47 +168,133 @@ export default function TranslationReview() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Bulk Actions & Filters */}
       <div className="card">
-        <div className="flex items-center space-x-4">
-          <span className="text-sm font-medium text-gray-700">Filter:</span>
-          <div className="flex space-x-2">
-            {['all', 'pending', 'approved', 'rejected'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === status
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
+        {/* Bulk Actions */}
+        {selectedItems.length > 0 && (
+          <div className="mb-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-primary-900">
+                {selectedItems.length} item(s) selected
+              </span>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleBulkApprove}
+                  className="btn btn-success flex items-center space-x-2"
+                  disabled={bulkApproveMutation.isPending}
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Approve All</span>
+                </button>
+                <button
+                  onClick={handleBulkReject}
+                  className="btn btn-danger flex items-center space-x-2"
+                  disabled={bulkRejectMutation.isPending}
+                >
+                  <X className="w-4 h-4" />
+                  <span>Reject All</span>
+                </button>
+                <button
+                  onClick={() => setSelectedItems([])}
+                  className="btn btn-secondary"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedItems.length === translations?.length && translations?.length > 0}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-gray-300"
+              />
+              <span className="text-sm font-medium text-gray-700">Select All</span>
+            </label>
+            <div className="h-4 w-px bg-gray-300"></div>
+            <span className="text-sm font-medium text-gray-700">Filter:</span>
+            <div className="flex space-x-2">
+              {['all', 'pending', 'approved', 'rejected'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === status
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Next Step Guidance */}
+      {translations && translations.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-blue-900">Next Steps</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                {translations.filter(t => t.status === 'pending').length > 0
+                  ? `Review ${translations.filter(t => t.status === 'pending').length} pending translation(s). Approve or edit as needed, then export when ready.`
+                  : 'All translations approved! Click the Export button to download your translations.'}
+              </p>
+            </div>
+            {translations.filter(t => t.status === 'approved').length === translations.length && (
+              <button
+                onClick={() => navigate(`/projects/${projectId}/export`)}
+                className="btn btn-primary whitespace-nowrap"
+              >
+                Export Now →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Translation Items */}
       <div className="space-y-4">
         {translations && translations.length > 0 ? (
           translations.map((item) => (
-            <div key={item._id} className="card">
+            <div key={item._id} className={`card ${selectedItems.includes(item._id) ? 'ring-2 ring-primary-500' : ''}`}>
               {/* Item Header */}
               <div className="flex items-center justify-between mb-4 pb-4 border-b">
                 <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedItems.includes(item._id)}
+                    onChange={() => toggleSelectItem(item._id)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
                   <span className="text-xs px-2 py-1 bg-gray-100 rounded">{item.page}</span>
                   <span className="text-xs text-gray-500">→ {item.section}</span>
                   <span className="text-xs text-gray-400">({item.elementType})</span>
                 </div>
-                <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-                  item.status === 'approved' ? 'bg-green-100 text-green-800' :
-                  item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {item.status}
-                </span>
+                <div className="flex items-center space-x-2">
+                  {item.content.bm && item.content.zh && (
+                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                      ✓ Translated
+                    </span>
+                  )}
+                  <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                    item.status === 'approved' ? 'bg-green-100 text-green-800' :
+                    item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {item.status === 'approved' ? '✓ Approved' : item.status === 'pending' ? '⏳ Pending' : '✗ Rejected'}
+                  </span>
+                </div>
               </div>
 
               {/* Translation Grid */}

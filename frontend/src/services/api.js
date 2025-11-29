@@ -29,7 +29,9 @@ export const translationAPI = {
   translate: (id, data) => api.post(`/translations/${id}/translate`, data),
   batchTranslate: (projectId, data) => api.post(`/translations/project/${projectId}/batch-translate`, data),
   approve: (id, reviewer) => api.post(`/translations/${id}/approve`, { reviewer }),
-  reject: (id, notes) => api.post(`/translations/${id}/reject`, { notes })
+  reject: (id, notes) => api.post(`/translations/${id}/reject`, { notes }),
+  bulkApprove: (translationIds, reviewer) => api.post('/translations/bulk/approve', { translationIds, reviewer }),
+  bulkReject: (translationIds, notes) => api.post('/translations/bulk/reject', { translationIds, notes })
 };
 
 // Upload
