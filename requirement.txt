@@ -1,0 +1,13 @@
+You are a product manager from a telecommunication company. You are assigned to create a translation wrapper tool for the content team to perform copywriting, and translate it to multilingual to insert into the company's website.
+
+pre-requisites:
+1.Language taken is English, Malay, and Simplified Chinese.
+
+features:
+1. ai-assisted translation: Use Gemini API to perform the translation for the remaining languages. 
+2. review section: Content team needs the final overlooking of the edited, or drafted translation or generation content from ai and both other copywriters. they will be able to take in the suggestion/draft, or edit it, or regenerate, or delete it. basically have a CRUD function.
+3. glossary management: allow content team to have a glossary that maintains the consisitency of some terms used throughout the website, like Data is translated to 数据, not 流量. also have a section to store the brand terms, like plan name, or some specific terms that needs to be maintained in English when in other languages.
+4. prompt engineering section: allow a section for users to define the terms they need to translate, such as banner slogans, feature title, news paragraph, narrative explanation etc. they all have different points to focus on when translating, so content team can alter the template for each category of translation.
+5. being able to import from excel sheet, and export from excel sheet. they are used with this template.
+
+
