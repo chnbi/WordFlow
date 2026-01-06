@@ -20,6 +20,10 @@ export const ACTIONS = {
     MANAGE_CATEGORIES: 'manage_categories',
     CONFIGURE_SETTINGS: 'configure_settings',
 
+    // Review Actions (Admin + Manager)
+    APPROVE_TRANSLATION: 'approve_translation',
+    REJECT_TRANSLATION: 'reject_translation',
+
     // Content (Admin + Manager + Editor)
     CREATE_PROJECT: 'create_project',
     EDIT_PROJECT: 'edit_project',
@@ -44,6 +48,8 @@ const permissions = {
     [ROLES.MANAGER]: [
         ACTIONS.MANAGE_CATEGORIES,
         ACTIONS.CONFIGURE_SETTINGS,
+        ACTIONS.APPROVE_TRANSLATION,
+        ACTIONS.REJECT_TRANSLATION,
         ACTIONS.CREATE_PROJECT,
         ACTIONS.EDIT_PROJECT,
         ACTIONS.DELETE_PROJECT,

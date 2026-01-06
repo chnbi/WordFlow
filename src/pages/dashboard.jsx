@@ -1,6 +1,6 @@
 // Dashboard - Quick Actions + Recent Projects Table
 import { useState } from "react"
-import { Plus, Upload, FileText, Settings, Filter, ArrowUpDown, LayoutGrid, List, FileSpreadsheet, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { Plus, Upload, FileText, Settings, LayoutGrid, List, FileSpreadsheet, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -11,8 +11,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import ImportExcelDialog from "@/components/project-import-dialog"
-import NewProjectDialog from "@/components/new-project-dialog"
+import { ImportExcelDialog, NewProjectDialog } from "@/components/dialogs"
 import { useProjects } from "@/context/ProjectContext"
 import { useAuth, ACTIONS } from "@/App"
 
@@ -58,7 +57,7 @@ const statusColors = {
 }
 
 export default function Dashboard() {
-    const { projects, addProject, deleteProject, isLoading, dataSource } = useProjects()
+    const { projects, addProject, deleteProject, isLoading, dataSource, addProjectPage } = useProjects()
     const { canDo } = useAuth()
     const [searchQuery, setSearchQuery] = useState("")
     const [viewMode, setViewMode] = useState("list")
@@ -76,17 +75,34 @@ export default function Dashboard() {
     }
 
     const handleImport = async (data) => {
+        // Calculate total rows from all pages
+        const totalRows = data.pages?.reduce((sum, p) => sum + (p.rows?.length || 0), 0) || 0
+
         const newProject = {
             name: data.projectName,
             pages: data.pages?.length || 1,
-            totalRows: data.pages?.reduce((sum, p) => sum + (p.rowCount || 0), 0) || 0,
+            totalRows: totalRows,
             sourceLanguage: 'English',
             targetLanguages: ['Bahasa Malaysia', 'Chinese'],
             team: [],
             color: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
         }
+
         const created = await addProject(newProject)
+
         if (created?.id) {
+            // Add pages with actual row data using context function
+            for (const page of (data.pages || [])) {
+                if (page.rows && page.rows.length > 0) {
+                    try {
+                        await addProjectPage(created.id, { name: page.name }, page.rows)
+                    } catch (error) {
+                        console.error('Error creating page:', error)
+                    }
+                }
+            }
+
+            // Navigate to the new project
             window.location.hash = `#project/${created.id}`
         }
     }
@@ -153,16 +169,8 @@ export default function Dashboard() {
                 })}
             </div>
 
-            {/* Filter Row */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="gap-2">
-                        <Filter className="w-4 h-4" /> Filter
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-2">
-                        <ArrowUpDown className="w-4 h-4" /> Sort by
-                    </Button>
-                </div>
+            {/* View Mode Toggle */}
+            <div className="flex items-center justify-end">
                 <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg">
                     <button
                         onClick={() => setViewMode("grid")}
@@ -245,7 +253,11 @@ export default function Dashboard() {
                                         </Avatar>
                                     ))}
                                 </div>
-                                <span className="text-sm text-muted-foreground">{project.lastUpdated}</span>
+                                <span className="text-sm text-muted-foreground">
+                                    {project.lastUpdated
+                                        ? new Date(project.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                        : 'Recently'}
+                                </span>
                             </div>
 
                             {/* Actions */}

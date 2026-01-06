@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Component } from 'react'
 import Layout from './components/layout'
-import Home from './pages/home'
 import Dashboard from './pages/dashboard'
 import Glossary from './pages/glossary-library'
 import PromptLibrary from './pages/prompt-library'
@@ -13,6 +12,8 @@ import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor, ACTIONS } 
 import { ProjectProvider, useProjects } from './context/ProjectContext'
 import { GlossaryProvider } from './context/GlossaryContext'
 import { PromptProvider } from './context/PromptContext'
+import { Toaster } from "sonner"
+import { AlertCircle } from "lucide-react"
 
 // ===========================================
 // DEV MODE: Set to true to bypass auth
@@ -25,6 +26,50 @@ const mockUser = {
     email: 'dev@example.com',
     displayName: 'Dev User',
     photoURL: null
+}
+
+// Error Boundary
+class ErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        console.error("Uncaught error:", error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-zinc-950 p-6">
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-red-200 dark:border-red-900 p-8 max-w-md w-full text-center">
+                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+                        </div>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Something went wrong</h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                            We encountered an unexpected error. Try refreshing the page.
+                        </p>
+                        <div className="bg-slate-100 dark:bg-zinc-800 rounded-lg p-3 text-left overflow-auto max-h-40 mb-6">
+                            <code className="text-xs text-red-600 dark:text-red-400">{this.state.error?.toString()}</code>
+                        </div>
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium w-full"
+                        >
+                            Refresh Page
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
 }
 
 // Auth context with role support
@@ -60,17 +105,16 @@ function AppWithRouting({ authContextValue }) {
         switch (path) {
             case '/':
             case '':
-                return { component: Home, breadcrumbs: [{ label: 'Home' }] }
             case 'projects':
-                return { component: Dashboard, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Projects' }] }
+                return { component: Dashboard, breadcrumbs: [{ label: 'Projects' }] }
             case 'glossary':
-                return { component: Glossary, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Glossary' }] }
+                return { component: Glossary, breadcrumbs: [{ label: 'Projects', href: '#' }, { label: 'Glossary' }] }
             case 'prompt':
-                return { component: PromptLibrary, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Prompt Library' }] }
+                return { component: PromptLibrary, breadcrumbs: [{ label: 'Projects', href: '#' }, { label: 'Prompt Library' }] }
             case 'image-translate':
-                return { component: ImageTranslation, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Image Translation' }] }
+                return { component: ImageTranslation, breadcrumbs: [{ label: 'Projects', href: '#' }, { label: 'Image Translation' }] }
             case 'settings':
-                return { component: Settings, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings' }] }
+                return { component: Settings, breadcrumbs: [{ label: 'Projects', href: '#' }, { label: 'Settings' }] }
             default:
                 if (path.startsWith('project/')) {
                     const projectId = path.split('/')[1]
@@ -79,14 +123,13 @@ function AppWithRouting({ authContextValue }) {
                     return {
                         component: ProjectView,
                         breadcrumbs: [
-                            { label: 'Home', href: '#' },
-                            { label: 'Projects', href: '#projects' },
+                            { label: 'Projects', href: '#' },
                             { label: projectName }
                         ],
                         projectId
                     }
                 }
-                return { component: Home, breadcrumbs: [{ label: 'Home' }] }
+                return { component: Dashboard, breadcrumbs: [{ label: 'Projects' }] }
         }
     }
 
@@ -122,13 +165,16 @@ function App() {
 
     if (DEV_BYPASS_AUTH) {
         return (
-            <ProjectProvider>
-                <GlossaryProvider>
-                    <PromptProvider>
-                        <AppWithRouting authContextValue={authContextValue} />
-                    </PromptProvider>
-                </GlossaryProvider>
-            </ProjectProvider>
+            <ErrorBoundary>
+                <ProjectProvider>
+                    <GlossaryProvider>
+                        <PromptProvider>
+                            <AppWithRouting authContextValue={authContextValue} />
+                            <Toaster />
+                        </PromptProvider>
+                    </GlossaryProvider>
+                </ProjectProvider>
+            </ErrorBoundary>
         )
     }
 
@@ -156,15 +202,18 @@ function App() {
     }
 
     return (
-        <ProjectProvider>
-            <GlossaryProvider>
-                <PromptProvider>
-                    <AuthProvider>
-                        <AppContent />
-                    </AuthProvider>
-                </PromptProvider>
-            </GlossaryProvider>
-        </ProjectProvider>
+        <ErrorBoundary>
+            <ProjectProvider>
+                <GlossaryProvider>
+                    <PromptProvider>
+                        <AuthProvider>
+                            <AppContent />
+                            <Toaster />
+                        </AuthProvider>
+                    </PromptProvider>
+                </GlossaryProvider>
+            </ProjectProvider>
+        </ErrorBoundary>
     )
 }
 

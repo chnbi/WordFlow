@@ -1,6 +1,6 @@
 // Layout component - wraps all pages with sidebar
 import { AppSidebar } from "@/components/app-sidebar"
-import { House, BookOpen, Library, Settings2, Folder, FileText, ChevronDown } from "lucide-react"
+import { BookOpen, Library, Settings2, Folder, FileText, ChevronDown } from "lucide-react"
 import {
     SidebarInset,
     SidebarProvider,
@@ -16,7 +16,6 @@ import {
 
 // Icon mapping for breadcrumb items
 const iconMap = {
-    'Home': House,
     'Projects': Folder,
     'Glossary': BookOpen,
     'Prompt Library': Library,

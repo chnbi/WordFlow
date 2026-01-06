@@ -1,8 +1,13 @@
 // Image Translation - Upload images and extract text for translation
+// Uses Gemini Vision for OCR
 import { useState } from "react"
-import { Upload, Image, FileText, Sparkles, X, CheckCircle2, Clock, ArrowRight, Languages, Trash2 } from "lucide-react"
+import { Upload, Image, FileText, Sparkles, X, CheckCircle2, Clock, ArrowRight, Languages, Trash2, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { extractTextFromImage, extractAndTranslate, isVisionAvailable } from "@/lib/gemini-vision-service"
+import { translateBatch } from "@/lib/gemini-service"
+import { useGlossary } from "@/context/GlossaryContext"
+import { toast } from "sonner"
 
 // Workflow states
 const STATES = {
@@ -10,6 +15,8 @@ const STATES = {
     PREVIEW: 'preview',    // File uploaded, ready to extract
     EXTRACTING: 'extracting', // OCR in progress
     EDITING: 'editing',    // Extracted text, ready to edit/translate
+    TRANSLATING: 'translating', // Translation in progress
+    ERROR: 'error',        // Error state
 }
 
 export default function ImageTranslation() {
@@ -18,6 +25,10 @@ export default function ImageTranslation() {
     const [previewUrl, setPreviewUrl] = useState(null)
     const [extractedLines, setExtractedLines] = useState([])
     const [progress, setProgress] = useState(0)
+    const [error, setError] = useState(null)
+
+    const { terms: glossaryTerms } = useGlossary()
+    const apiAvailable = isVisionAvailable()
 
     // Handle file upload
     const handleFileSelect = (e) => {
@@ -26,6 +37,7 @@ export default function ImageTranslation() {
             setUploadedFile(file)
             setPreviewUrl(URL.createObjectURL(file))
             setState(STATES.PREVIEW)
+            setError(null)
         }
     }
 
@@ -37,38 +49,55 @@ export default function ImageTranslation() {
             setUploadedFile(file)
             setPreviewUrl(URL.createObjectURL(file))
             setState(STATES.PREVIEW)
+            setError(null)
         }
     }
 
-    // Simulate extraction
-    const handleExtract = () => {
-        setState(STATES.EXTRACTING)
-        setProgress(0)
+    // Extract text using Gemini Vision API
+    const handleExtract = async () => {
+        if (!uploadedFile) return
 
-        // Simulate progress
-        const interval = setInterval(() => {
-            setProgress(prev => {
-                if (prev >= 100) {
-                    clearInterval(interval)
-                    // Mock extracted lines
-                    setExtractedLines([
-                        { id: 1, text: "Welcome to our service", en: "Welcome to our service", my: "", zh: "" },
-                        { id: 2, text: "Get started today", en: "Get started today", my: "", zh: "" },
-                        { id: 3, text: "Premium features included", en: "Premium features included", my: "", zh: "" },
-                    ])
-                    setState(STATES.EDITING)
-                    return 100
-                }
-                return prev + 10
-            })
-        }, 200)
+        setState(STATES.EXTRACTING)
+        setProgress(10)
+        setError(null)
+
+        try {
+            if (!apiAvailable) {
+                toast.error("Gemini API Key is missing")
+                setError("API Key missing. Please configure VITE_GEMINI_API_KEY.")
+                setState(STATES.ERROR)
+                return
+            }
+
+            setProgress(30)
+            const lines = await extractTextFromImage(uploadedFile)
+            setProgress(100)
+
+            if (lines.length === 0) {
+                setError('No text found in the image. Try a different image.')
+                setState(STATES.PREVIEW)
+                return
+            }
+
+            setExtractedLines(lines)
+            setState(STATES.EDITING)
+
+        } catch (err) {
+            console.error('[OCR] Extraction failed:', err)
+            setError(err.message || 'Failed to extract text from image')
+            setState(STATES.ERROR)
+        }
     }
+
+
 
     // Reset to initial state
     const handleReset = () => {
         setUploadedFile(null)
         setPreviewUrl(null)
         setExtractedLines([])
+        setProgress(0)
+        setError(null)
         setState(STATES.UPLOAD)
     }
 
@@ -77,19 +106,49 @@ export default function ImageTranslation() {
         setExtractedLines(prev => prev.filter(line => line.id !== lineId))
     }
 
-    // Simulate translate all
+    // Translate all lines using Gemini
     const handleTranslateAll = async () => {
-        for (let i = 0; i < extractedLines.length; i++) {
-            await new Promise(resolve => setTimeout(resolve, 400))
-            setExtractedLines(prev => prev.map((line, idx) =>
-                idx === i ? {
-                    ...line,
-                    my: `[MY] ${line.en}`,
-                    zh: `[ZH] ${line.en}`,
-                    translated: true
-                } : line
-            ))
+        setState(STATES.TRANSLATING)
+        setProgress(20)
+
+        try {
+            if (!apiAvailable) {
+                toast.error("Gemini API Key is missing")
+                return
+            }
+
+            // Use the translation service with glossary
+            const results = await translateBatch(
+                extractedLines,
+                { name: 'Image Content', prompt: 'Translate image text naturally.' },
+                { targetLanguages: ['my', 'zh'], glossaryTerms }
+            )
+
+            setProgress(90)
+
+            // Merge results with existing lines
+            setExtractedLines(prev => prev.map(line => {
+                const result = results.find(r => r.id === line.id)
+                return result ? { ...line, ...result, translated: true } : line
+            }))
+
+            setProgress(100)
+            setState(STATES.EDITING)
+
+        } catch (err) {
+            console.error('[Translation] Failed:', err)
+            setError('Translation failed: ' + (err.message || 'Unknown error'))
+            setState(STATES.EDITING)
         }
+    }
+
+
+
+    // Edit line text
+    const handleEditLine = (lineId, field, value) => {
+        setExtractedLines(prev => prev.map(line =>
+            line.id === lineId ? { ...line, [field]: value } : line
+        ))
     }
 
     return (
@@ -98,9 +157,31 @@ export default function ImageTranslation() {
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Image Translation</h1>
                 <p className="text-muted-foreground mt-1">
-                    Upload images, extract text with OCR, and translate.
+                    Upload images, extract text with AI OCR, and translate.
                 </p>
+                {!apiAvailable && (
+                    <div className="mt-2 flex items-center gap-2 text-red-600 text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>API key not configured. Functionality disabled.</span>
+                    </div>
+                )}
             </div>
+
+            {/* Error State */}
+            {state === STATES.ERROR && (
+                <div className="rounded-2xl border-2 border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-8">
+                    <div className="flex flex-col items-center justify-center py-8">
+                        <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center mb-4">
+                            <AlertCircle className="w-8 h-8 text-red-600" />
+                        </div>
+                        <p className="text-lg font-medium text-red-700 dark:text-red-400 mb-2">Extraction Failed</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 mb-4">{error}</p>
+                        <Button variant="outline" onClick={handleReset}>
+                            Try Again
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* Upload Section */}
             {(state === STATES.UPLOAD || state === STATES.PREVIEW) && (
@@ -154,6 +235,10 @@ export default function ImageTranslation() {
                                         {(uploadedFile?.size / 1024).toFixed(1)} KB
                                     </p>
 
+                                    {error && (
+                                        <p className="text-sm text-amber-600 mb-4">{error}</p>
+                                    )}
+
                                     {/* Actions */}
                                     <div className="flex gap-3">
                                         <Button onClick={handleExtract} className="gap-2">
@@ -187,6 +272,24 @@ export default function ImageTranslation() {
                 </div>
             )}
 
+            {/* Translating State */}
+            {state === STATES.TRANSLATING && (
+                <div className="rounded-2xl border border-border bg-card p-8">
+                    <div className="flex flex-col items-center justify-center py-8">
+                        <div className="w-16 h-16 rounded-2xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center mb-4">
+                            <Loader2 className="w-8 h-8 text-violet-600 animate-spin" />
+                        </div>
+                        <p className="text-lg font-medium mb-4">Translating content...</p>
+                        <div className="w-64">
+                            <Progress value={progress} className="h-2" />
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-2">
+                            Translating to Malay and Chinese...
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Editing State - Extracted Text */}
             {state === STATES.EDITING && (
                 <>
@@ -208,12 +311,12 @@ export default function ImageTranslation() {
                         <div className="rounded-2xl border border-border bg-card p-4">
                             <div className="flex items-center justify-between mb-4">
                                 <p className="text-sm font-medium text-muted-foreground">Extracted Text</p>
-                                <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">
+                                <span className="text-xs bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full">
                                     {extractedLines.length} lines
                                 </span>
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-3 max-h-[400px] overflow-y-auto">
                                 {extractedLines.map((line, index) => (
                                     <div key={line.id} className="p-3 rounded-xl bg-muted/50 border border-border/50">
                                         <div className="flex items-start justify-between gap-2 mb-2">
@@ -225,11 +328,17 @@ export default function ImageTranslation() {
                                                 <Trash2 className="w-3 h-3" />
                                             </button>
                                         </div>
-                                        <p className="text-sm font-medium">{line.text}</p>
+                                        <p className="text-sm font-medium mb-2">{line.text || line.en}</p>
                                         {line.translated && (
-                                            <div className="mt-2 space-y-1 text-xs">
-                                                <p className="text-muted-foreground">MY: {line.my}</p>
-                                                <p className="text-muted-foreground">ZH: {line.zh}</p>
+                                            <div className="space-y-1 text-xs border-t border-border/50 pt-2 mt-2">
+                                                <div className="flex gap-2">
+                                                    <span className="text-muted-foreground w-6">MY:</span>
+                                                    <span className="text-foreground">{line.my || '—'}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <span className="text-muted-foreground w-6">ZH:</span>
+                                                    <span className="text-foreground">{line.zh || '—'}</span>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -242,17 +351,24 @@ export default function ImageTranslation() {
                     <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/50 border border-border/50">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            <span>Text extracted successfully</span>
+                            <span>
+                                {extractedLines.some(l => l.translated)
+                                    ? `${extractedLines.filter(l => l.translated).length}/${extractedLines.length} lines translated`
+                                    : 'Text extracted successfully'
+                                }
+                            </span>
                         </div>
                         <div className="flex gap-3">
                             <Button variant="outline" onClick={handleReset}>
                                 Start Over
                             </Button>
-                            <Button className="gap-2" onClick={handleTranslateAll}>
-                                <Languages className="w-4 h-4" />
-                                Translate All
-                                <ArrowRight className="w-4 h-4" />
-                            </Button>
+                            {!extractedLines.every(l => l.translated) && (
+                                <Button className="gap-2" onClick={handleTranslateAll}>
+                                    <Languages className="w-4 h-4" />
+                                    Translate All
+                                    <ArrowRight className="w-4 h-4" />
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </>

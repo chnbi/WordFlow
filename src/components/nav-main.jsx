@@ -19,7 +19,7 @@ export function NavMain({
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
+            <SidebarMenuItem key={item.url || item.title}>
               <SidebarMenuButton asChild tooltip={item.title} className="text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent active:bg-sidebar-accent active:text-sidebar-primary data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-primary data-[active=true]:shadow-sm transition-all rounded-xl h-10 font-medium">
                 <a href={item.url}>
                   {item.icon && <item.icon className="opacity-70 group-hover:opacity-100" />}

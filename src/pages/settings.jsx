@@ -1,7 +1,11 @@
 // Settings - User and admin settings with consistent layout
-import { User, Shield, Bell, Palette, Key, ChevronRight } from "lucide-react"
+import { User, Shield, Bell, Palette, Key, ChevronRight, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/App"
+import { useState } from "react"
+import ManageCategoriesDialog from "@/components/dialogs/ManageCategoriesDialog"
+import { toast } from "sonner"
+import { translateBatch } from "@/lib/gemini-service"
 
 const settingsSections = [
     {
@@ -47,10 +51,20 @@ const adminSections = [
         color: 'bg-rose-100 dark:bg-rose-900/40',
         iconColor: 'text-rose-600 dark:text-rose-400',
     },
+    {
+        id: 'categories',
+        icon: Palette,
+        title: 'Glossary Categories',
+        description: 'Manage translation category labels and colors',
+        color: 'bg-violet-100 dark:bg-violet-900/40',
+        iconColor: 'text-violet-600 dark:text-violet-400',
+        action: 'open_categories'
+    },
 ]
 
 export default function Settings() {
     const { isAdmin, user } = useAuth()
+    const [isCategoryOpen, setIsCategoryOpen] = useState(false)
 
     return (
         <div className="space-y-6 w-full">
@@ -60,6 +74,42 @@ export default function Settings() {
                     <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
                     <p className="text-muted-foreground mt-1">Manage your account and preferences</p>
                 </div>
+            </div>
+
+            {/* System Health Check (Manager Feature) */}
+            <div className="rounded-2xl bg-card border shadow-sm p-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                        <Activity className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-foreground">AI Connection Status</h3>
+                        <p className="text-sm text-muted-foreground">Check if Gemini API is active and responding.</p>
+                    </div>
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={async () => {
+                        const toastId = toast.loading("Testing connection...")
+                        try {
+                            // Test translation of "Hello"
+                            const res = await translateBatch(
+                                [{ id: 'test', en: 'Hello' }],
+                                { name: 'Test', prompt: 'Translate directly.' }
+                            )
+                            if (res && res.length > 0 && res[0].my) {
+                                toast.success("Connected! API is responding.", { id: toastId })
+                            } else {
+                                throw new Error("Invalid response")
+                            }
+                        } catch (err) {
+                            console.error(err)
+                            toast.error("Connection Failed. Check API Key.", { id: toastId })
+                        }
+                    }}
+                >
+                    Test Connection
+                </Button>
             </div>
 
             {/* General Settings */}
@@ -101,6 +151,9 @@ export default function Settings() {
                             return (
                                 <button
                                     key={section.id}
+                                    onClick={() => {
+                                        if (section.action === 'open_categories') setIsCategoryOpen(true)
+                                    }}
                                     className="w-full flex items-center gap-4 p-5 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-colors text-left"
                                 >
                                     <div className={`w-11 h-11 rounded-xl ${section.color} flex items-center justify-center shrink-0`}>
@@ -128,6 +181,11 @@ export default function Settings() {
                     Logged in as <span className="text-zinc-600 dark:text-zinc-300 font-medium">{user?.email || 'Not logged in'}</span>
                 </p>
             </div>
+
+            <ManageCategoriesDialog
+                open={isCategoryOpen}
+                onOpenChange={setIsCategoryOpen}
+            />
         </div>
     )
 }

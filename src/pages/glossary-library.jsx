@@ -9,274 +9,18 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
-import GlossaryTermDialog from "@/components/glossary-term-dialog"
+import { GlossaryTermDialog } from "@/components/dialogs"
 import { useAuth, ACTIONS } from "@/App"
 import { useGlossary } from "@/context/GlossaryContext"
 import * as XLSX from "xlsx"
+import ImportGlossaryDialog from "@/components/dialogs/ImportGlossaryDialog"
+import { toast } from "sonner"
+import { Upload } from "lucide-react"
 
-// Enhanced mock data
-const initialGlossaryData = [
-    {
-        id: 1,
-        english: "Dashboard",
-        malay: "Papan Pemuka",
-        chinese: "仪表板",
-        category: "UI",
-        status: "approved",
-        remark: "Standard UI term. Do not use '控制面板'.",
-        dateModified: "Jan 1, 2025",
-    },
-    {
-        id: 2,
-        english: "Settings",
-        malay: "Tetapan",
-        chinese: "设置",
-        category: "UI",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 30, 2024",
-    },
-    {
-        id: 3,
-        english: "Submit",
-        malay: "Hantar",
-        chinese: "提交",
-        category: "Actions",
-        status: "approved",
-        remark: "For form buttons. Use '发送' only for messaging.",
-        dateModified: "Dec 28, 2024",
-    },
-    {
-        id: 4,
-        english: "Privacy Policy",
-        malay: "Dasar Privasi",
-        chinese: "隐私政策",
-        category: "Legal",
-        status: "draft",
-        remark: "Awaiting legal review",
-        dateModified: "Dec 27, 2024",
-    },
-    {
-        id: 5,
-        english: "User Account",
-        malay: "Akaun Pengguna",
-        chinese: "用户账户",
-        category: "Account",
-        status: "deprecated",
-        remark: "Replaced by 'My Profile'",
-        dateModified: "Dec 20, 2024",
-    },
-    {
-        id: 6,
-        english: "Sign In",
-        malay: "Log Masuk",
-        chinese: "登录",
-        category: "Account",
-        status: "approved",
-        remark: "Use for login buttons",
-        dateModified: "Dec 18, 2024",
-    },
-    {
-        id: 7,
-        english: "Sign Out",
-        malay: "Log Keluar",
-        chinese: "退出登录",
-        category: "Account",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 18, 2024",
-    },
-    {
-        id: 8,
-        english: "Cancel",
-        malay: "Batal",
-        chinese: "取消",
-        category: "Actions",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 15, 2024",
-    },
-    {
-        id: 9,
-        english: "Confirm",
-        malay: "Sahkan",
-        chinese: "确认",
-        category: "Actions",
-        status: "approved",
-        remark: "Use in confirmation dialogs",
-        dateModified: "Dec 15, 2024",
-    },
-    {
-        id: 10,
-        english: "Delete",
-        malay: "Padam",
-        chinese: "删除",
-        category: "Actions",
-        status: "approved",
-        remark: "Use carefully - destructive action",
-        dateModified: "Dec 14, 2024",
-    },
-    {
-        id: 11,
-        english: "Edit",
-        malay: "Sunting",
-        chinese: "编辑",
-        category: "Actions",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 14, 2024",
-    },
-    {
-        id: 12,
-        english: "Save",
-        malay: "Simpan",
-        chinese: "保存",
-        category: "Actions",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 14, 2024",
-    },
-    {
-        id: 13,
-        english: "Download",
-        malay: "Muat Turun",
-        chinese: "下载",
-        category: "Actions",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 12, 2024",
-    },
-    {
-        id: 14,
-        english: "Upload",
-        malay: "Muat Naik",
-        chinese: "上传",
-        category: "Actions",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 12, 2024",
-    },
-    {
-        id: 15,
-        english: "Notifications",
-        malay: "Pemberitahuan",
-        chinese: "通知",
-        category: "UI",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 10, 2024",
-    },
-    {
-        id: 16,
-        english: "Profile",
-        malay: "Profil",
-        chinese: "个人资料",
-        category: "Account",
-        status: "approved",
-        remark: "Use instead of 'User Account'",
-        dateModified: "Dec 10, 2024",
-    },
-    {
-        id: 17,
-        english: "Home",
-        malay: "Laman Utama",
-        chinese: "首页",
-        category: "UI",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 8, 2024",
-    },
-    {
-        id: 18,
-        english: "Terms of Service",
-        malay: "Terma Perkhidmatan",
-        chinese: "服务条款",
-        category: "Legal",
-        status: "draft",
-        remark: "Pending legal approval",
-        dateModified: "Dec 5, 2024",
-    },
-    {
-        id: 19,
-        english: "Data Protection",
-        malay: "Perlindungan Data",
-        chinese: "数据保护",
-        category: "Legal",
-        status: "draft",
-        remark: "",
-        dateModified: "Dec 5, 2024",
-    },
-    {
-        id: 20,
-        english: "Get Started",
-        malay: "Mulakan",
-        chinese: "开始使用",
-        category: "Marketing",
-        status: "approved",
-        remark: "CTA button text",
-        dateModified: "Dec 3, 2024",
-    },
-    {
-        id: 21,
-        english: "Learn More",
-        malay: "Ketahui Lebih Lanjut",
-        chinese: "了解更多",
-        category: "Marketing",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 3, 2024",
-    },
-    {
-        id: 22,
-        english: "API Key",
-        malay: "Kunci API",
-        chinese: "API密钥",
-        category: "Technical",
-        status: "approved",
-        remark: "",
-        dateModified: "Dec 1, 2024",
-    },
-    {
-        id: 23,
-        english: "Webhook",
-        malay: "Webhook",
-        chinese: "Webhook",
-        category: "Technical",
-        status: "approved",
-        remark: "Keep as-is in all languages",
-        dateModified: "Dec 1, 2024",
-    },
-    {
-        id: 24,
-        english: "Search",
-        malay: "Cari",
-        chinese: "搜索",
-        category: "UI",
-        status: "approved",
-        remark: "",
-        dateModified: "Nov 28, 2024",
-    },
-    {
-        id: 25,
-        english: "Filter",
-        malay: "Tapis",
-        chinese: "筛选",
-        category: "UI",
-        status: "approved",
-        remark: "",
-        dateModified: "Nov 28, 2024",
-    },
-]
 
-const categoryColors = {
-    "UI": "bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400",
-    "General": "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400",
-    "Account": "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-    "Actions": "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
-    "Legal": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-    "Marketing": "bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400",
-    "Technical": "bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400",
-}
+
+// Hardcoded category colors removed in favor of dynamic colors from context
+// const categoryColors = { ... }
 
 const statusConfig = {
     draft: { icon: Clock, label: "Draft", color: "text-slate-500 dark:text-slate-400", bg: "bg-slate-100 dark:bg-slate-800" },
@@ -284,11 +28,12 @@ const statusConfig = {
     deprecated: { icon: XCircle, label: "Deprecated", color: "text-rose-500 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-900/30" },
 }
 
-const categories = ["All", "UI", "General", "Account", "Actions", "Legal", "Marketing", "Technical"]
+// Hardcoded categories removed
+// const categories = ["All", "UI", "General", ... ]
 
 export default function Glossary() {
     const { canDo } = useAuth()
-    const { terms, addTerm, updateTerm, deleteTerm, deleteTerms } = useGlossary()
+    const { terms, addTerm, addTerms, updateTerm, deleteTerm, deleteTerms, categories: dynamicCategories } = useGlossary()
     const [searchQuery, setSearchQuery] = useState("")
     const [activeCategory, setActiveCategory] = useState("All")
     const [selectedIds, setSelectedIds] = useState([])
@@ -298,6 +43,7 @@ export default function Glossary() {
     const [editingTerm, setEditingTerm] = useState(null)
     const [deleteConfirm, setDeleteConfirm] = useState(null)
     const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+    const [isImportOpen, setIsImportOpen] = useState(false)
 
     // Filter and sort logic
     const filteredTerms = terms
@@ -396,6 +142,17 @@ export default function Glossary() {
         XLSX.writeFile(wb, "glossary_export.xlsx")
     }
 
+    const handleImport = async (newTerms) => {
+        try {
+            await addTerms(newTerms)
+            toast.success(`Successfully imported ${newTerms.length} terms`)
+            setIsImportOpen(false)
+        } catch (error) {
+            console.error('Import failed:', error)
+            toast.error("Failed to import terms")
+        }
+    }
+
     return (
         <TooltipProvider>
             <div className="space-y-6 w-full max-w-7xl mx-auto pb-10">
@@ -414,9 +171,14 @@ export default function Glossary() {
                             </Button>
                         )}
                         {canDo(ACTIONS.CREATE_GLOSSARY) && (
-                            <Button onClick={handleCreate}>
-                                <Plus className="w-4 h-4 mr-2" /> Add Term
-                            </Button>
+                            <>
+                                <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                                    <Upload className="w-4 h-4 mr-2" /> Import Excel
+                                </Button>
+                                <Button onClick={handleCreate}>
+                                    <Plus className="w-4 h-4 mr-2" /> Add Term
+                                </Button>
+                            </>
                         )}
                     </div>
                 </div>
@@ -424,17 +186,26 @@ export default function Glossary() {
                 {/* Filter Tabs + Actions Row */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     {/* Category Tabs */}
-                    <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-fit">
-                        {categories.map(cat => (
+                    <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl w-fit overflow-x-auto max-w-[600px] scrollbar-none">
+                        <button
+                            onClick={() => setActiveCategory("All")}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeCategory === "All"
+                                ? "bg-card text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                                }`}
+                        >
+                            All
+                        </button>
+                        {dynamicCategories.map(cat => (
                             <button
-                                key={cat}
-                                onClick={() => setActiveCategory(cat)}
-                                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeCategory === cat
+                                key={cat.id || cat.name || cat}
+                                onClick={() => setActiveCategory(cat.name || cat)}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeCategory === (cat.name || cat)
                                     ? "bg-card text-foreground shadow-sm"
                                     : "text-muted-foreground hover:text-foreground"
                                     }`}
                             >
-                                {cat}
+                                {cat.name || cat}
                             </button>
                         ))}
                     </div>
@@ -544,9 +315,15 @@ export default function Glossary() {
 
                                     {/* Category */}
                                     <div className="col-span-1">
-                                        <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full ${categoryColors[term.category] || categoryColors["General"]}`}>
-                                            {term.category}
-                                        </span>
+                                        {(() => {
+                                            const catObj = dynamicCategories.find(c => (c.name || c) === term.category)
+                                            const colorClass = catObj?.color || "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                            return (
+                                                <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full ${colorClass}`}>
+                                                    {term.category}
+                                                </span>
+                                            )
+                                        })()}
                                     </div>
 
                                     {/* Status */}
@@ -617,6 +394,12 @@ export default function Glossary() {
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>Showing {filteredTerms.length} of {terms.length} terms</span>
                 </div>
+
+                <ImportGlossaryDialog
+                    open={isImportOpen}
+                    onOpenChange={setIsImportOpen}
+                    onImport={handleImport}
+                />
 
                 <GlossaryTermDialog
                     open={isDialogOpen}

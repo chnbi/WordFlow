@@ -35,13 +35,21 @@ export async function parseExcelFile(file) {
                         startRow = 1
                     }
 
-                    // Find header row (looking for 'english', 'malay', 'chinese')
+                    // Find header row (looking for language columns)
+                    // Support many variations of column names
+                    const languageKeywords = [
+                        'english', 'malay', 'chinese', 'en', 'bm', 'cn', 'zh',
+                        'source', 'target', 'bahasa', 'melayu', 'mandarin',
+                        '中文', '英文', '马来文', 'chn', 'eng', 'bahasa malaysia',
+                        'chinese (simplified)', 'chinese (traditional)'
+                    ]
+
                     let headerRow = startRow
                     for (let i = startRow; i < Math.min(startRow + 5, jsonData.length); i++) {
                         const row = jsonData[i]
                         if (row && row.some(cell =>
                             typeof cell === 'string' &&
-                            ['english', 'malay', 'chinese', 'en', 'bm', 'cn'].includes(cell.toLowerCase())
+                            languageKeywords.some(kw => cell.toLowerCase().includes(kw))
                         )) {
                             headerRow = i
                             break
@@ -52,19 +60,39 @@ export async function parseExcelFile(file) {
                         typeof h === 'string' ? h.toLowerCase().trim() : ''
                     ) || []
 
-                    // Map common header variations
+                    // Map common header variations to normalized names
                     const headerMap = {
+                        // English variations
                         'en': 'english',
                         'eng': 'english',
+                        'source': 'english',
+                        '英文': 'english',
+                        // Malay variations
                         'bm': 'malay',
                         'bahasa': 'malay',
                         'melayu': 'malay',
+                        'bahasa malaysia': 'malay',
+                        '马来文': 'malay',
+                        // Chinese variations
                         'cn': 'chinese',
+                        'zh': 'chinese',
                         'chn': 'chinese',
-                        'mandarin': 'chinese'
+                        'mandarin': 'chinese',
+                        '中文': 'chinese',
+                        'chinese (simplified)': 'chinese',
+                        'chinese (traditional)': 'chinese',
                     }
 
-                    const normalizedHeaders = headers.map(h => headerMap[h] || h)
+                    // Normalize headers - check for partial matches too
+                    const normalizedHeaders = headers.map(h => {
+                        // Direct match first
+                        if (headerMap[h]) return headerMap[h]
+                        // Partial match (e.g., "Chinese (Simplified)" contains "chinese")
+                        if (h.includes('english') || h.includes('英文')) return 'english'
+                        if (h.includes('malay') || h.includes('bahasa') || h.includes('melayu')) return 'malay'
+                        if (h.includes('chinese') || h.includes('中文') || h.includes('mandarin')) return 'chinese'
+                        return h
+                    })
 
                     // Extract entries
                     const entries = []

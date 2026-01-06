@@ -1,13 +1,16 @@
-// ProjectView - Project translation workspace with row selection and template-based translation
 import { useState, useEffect, useRef } from "react"
-import { FileSpreadsheet, Languages, Download, CheckCircle, Clock, Sparkles, Copy, ArrowLeft, ChevronDown, Square, CheckSquare, Loader2, AlertCircle, X, Upload, Plus } from "lucide-react"
+import { FileSpreadsheet, Languages, Download, CheckCircle, Clock, Sparkles, ArrowLeft, ChevronDown, Square, CheckSquare, Loader2, AlertCircle, X, Upload, Plus, Table, List, Trash2, Check, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useProjects } from "@/context/ProjectContext"
 import { usePrompts } from "@/context/PromptContext"
+import { useAuth, ACTIONS } from "@/App"
 import * as XLSX from "xlsx"
+import { parseExcelFile } from "@/lib/excel"
+import { InlineRow, TableRow } from "@/components/project"
 
 // Extended status colors
 const statusColors = {
@@ -34,13 +37,12 @@ export default function ProjectView({ projectId }) {
         getProjectRows,
         updateProjectRow,
         addProjectRows,
-        // Pages (multi-sheet support)
         getProjectPages,
         getPageRows,
         getSelectedPageId,
         selectPage,
         addProjectPage,
-        // Selection
+        addPageRows,
         getSelectedRowIds,
         toggleRowSelection,
         selectAllRows,
@@ -50,31 +52,45 @@ export default function ProjectView({ projectId }) {
         cancelTranslationQueue,
         isProcessing,
         queueProgress,
+        deleteRows,
     } = useProjects()
 
     const { templates } = usePrompts()
+    const { canDo } = useAuth()
 
+    const [activeTab, setActiveTab] = useState("translation") // "translation" or "review"
+    const [viewMode, setViewMode] = useState("inline") // "inline" or "table"
     const [editingCell, setEditingCell] = useState(null)
     const [editValue, setEditValue] = useState("")
     const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
     const [showAddRowModal, setShowAddRowModal] = useState(false)
     const [newRowText, setNewRowText] = useState("")
     const [isImporting, setIsImporting] = useState(false)
+    const [statusFilter, setStatusFilter] = useState("all")
+    const [searchQuery, setSearchQuery] = useState("")
+
     const fileInputRef = useRef(null)
 
-    // Get project ID from URL if not passed as prop
     const id = projectId || window.location.hash.split('/')[1]
     const project = getProject(id)
 
-    // Get pages and determine which rows to show
     const pages = getProjectPages(id)
     const currentPageId = getSelectedPageId(id)
     const legacyRows = getProjectRows(id)
 
-    // Use page rows if pages exist, otherwise use legacy flat rows
-    const rows = pages.length > 0 && currentPageId
+    const allRows = pages.length > 0 && currentPageId
         ? getPageRows(id, currentPageId)
         : legacyRows
+
+    // Apply filters
+    const rows = allRows.filter(row => {
+        const matchesStatus = statusFilter === "all" || row.status === statusFilter
+        const matchesSearch = !searchQuery ||
+            (row.en || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (row.my || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (row.zh || '').toLowerCase().includes(searchQuery.toLowerCase())
+        return matchesStatus && matchesSearch
+    })
 
     const selectedRowIds = getSelectedRowIds(id)
     const selectedCount = selectedRowIds.size
@@ -94,13 +110,13 @@ export default function ProjectView({ projectId }) {
         )
     }
 
-    // Calculate stats from rows
-    const totalRows = rows.length
-    const translatedRows = rows.filter(r => r.my && r.zh).length
-    const pendingReview = rows.filter(r => r.status === 'review').length
+    // Calculate stats
+    const totalRows = allRows.length
+    const translatedRows = allRows.filter(r => r.my && r.zh).length
+    const pendingReview = allRows.filter(r => r.status === 'review').length
     const progress = totalRows > 0 ? Math.round((translatedRows / totalRows) * 100) : 0
 
-    // Handle cell editing
+    // Handlers
     const handleCellClick = (rowId, field, currentValue) => {
         setEditingCell({ rowId, field })
         setEditValue(currentValue || "")
@@ -108,11 +124,9 @@ export default function ProjectView({ projectId }) {
 
     const handleCellSave = () => {
         if (!editingCell) return
-
-        const row = rows.find(r => r.id === editingCell.rowId)
+        const row = allRows.find(r => r.id === editingCell.rowId)
         if (row) {
             const updates = { [editingCell.field]: editValue }
-            // Update status based on translations
             const newMy = editingCell.field === 'my' ? editValue : row.my
             const newZh = editingCell.field === 'zh' ? editValue : row.zh
             if (newMy && newZh) {
@@ -122,7 +136,6 @@ export default function ProjectView({ projectId }) {
             }
             updateProjectRow(id, editingCell.rowId, updates)
         }
-
         setEditingCell(null)
         setEditValue("")
     }
@@ -137,18 +150,11 @@ export default function ProjectView({ projectId }) {
         }
     }
 
-    // Copy source to target
-    const handleCopySource = (row, targetField) => {
-        updateProjectRow(id, row.id, { [targetField]: row.en || row.source })
-    }
-
-    // Handle template selection for translation
     const handleTranslateWithTemplate = (template) => {
         translateSelectedRows(id, template)
         setShowTemplateDropdown(false)
     }
 
-    // Handle select all checkbox
     const handleSelectAll = () => {
         if (selectedCount === rows.length) {
             deselectAllRows(id)
@@ -157,9 +163,8 @@ export default function ProjectView({ projectId }) {
         }
     }
 
-    // Export to Excel
     const handleExport = () => {
-        const exportData = rows.map(row => ({
+        const exportData = allRows.map(row => ({
             'Source': row.source || row.en,
             'English': row.en,
             'Bahasa Malaysia': row.my,
@@ -167,68 +172,52 @@ export default function ProjectView({ projectId }) {
             'Status': row.status,
             'Template Used': row.templateUsed || ''
         }))
-
         const ws = XLSX.utils.json_to_sheet(exportData)
         const wb = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(wb, ws, "Translations")
         XLSX.writeFile(wb, `${project.name}_export.xlsx`)
     }
 
-    // Handle importing Excel file (all sheets as pages)
     const handleImportSheet = async (event) => {
         const file = event.target.files?.[0]
         if (!file) return
 
         setIsImporting(true)
         try {
-            const data = await file.arrayBuffer()
-            const workbook = XLSX.read(data)
-
-            // Import ALL sheets as separate pages
+            // Use robust parsing from lib
+            const parsedData = await parseExcelFile(file)
             let totalRows = 0
-            for (const sheetName of workbook.SheetNames) {
-                const worksheet = workbook.Sheets[sheetName]
-                const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-                // Map Excel columns to row format
-                const newRows = jsonData.map((row, idx) => ({
-                    key: row.Key || row.key || `row_${Date.now()}_${idx}`,
-                    en: row.English || row.en || row.EN || row.Source || row.source || '',
-                    my: row['Bahasa Malaysia'] || row.BM || row.my || row.Malay || '',
-                    zh: row.Chinese || row['中文'] || row.zh || row.ZH || '',
+            for (const [sheetName, sheetData] of Object.entries(parsedData)) {
+                // Map to project internal format
+                const newRows = sheetData.entries.map((entry, idx) => ({
+                    key: `row_${Date.now()}_${idx}`,
+                    en: entry.english || '',
+                    my: entry.malay || '',
+                    zh: entry.chinese || '',
                     status: 'pending',
-                })).filter(row => row.en) // Only rows with English source
+                    source: entry.english || '' // Backup source
+                })).filter(row => row.en) // Only keep rows with source text
 
                 if (newRows.length > 0) {
-                    // Create a page for this sheet
                     if (typeof addProjectPage === 'function') {
                         await addProjectPage(id, { name: sheetName }, newRows)
-                        console.log(`✅ Created page "${sheetName}" with ${newRows.length} rows`)
                     } else {
-                        // Fallback to legacy flat rows
                         await addProjectRows(id, newRows)
-                        console.log(`✅ Imported ${newRows.length} rows from "${sheetName}"`)
                     }
                     totalRows += newRows.length
                 }
             }
-
-            console.log(`✅ Imported ${workbook.SheetNames.length} sheets with ${totalRows} total rows`)
         } catch (error) {
             console.error('Error importing file:', error)
         } finally {
             setIsImporting(false)
-            // Reset file input
-            if (fileInputRef.current) {
-                fileInputRef.current.value = ''
-            }
+            if (fileInputRef.current) fileInputRef.current.value = ''
         }
     }
 
-    // Handle adding a single row
     const handleAddRow = async () => {
         if (!newRowText.trim()) return
-
         const newRow = {
             key: `row_${Date.now()}`,
             en: newRowText.trim(),
@@ -236,15 +225,45 @@ export default function ProjectView({ projectId }) {
             zh: '',
             status: 'pending',
         }
-
-        await addProjectRows(id, [newRow])
+        // Use page-specific add if project has pages, otherwise use legacy
+        if (pages.length > 0 && currentPageId) {
+            await addPageRows(id, currentPageId, [newRow])
+        } else {
+            await addProjectRows(id, [newRow])
+        }
         setNewRowText('')
         setShowAddRowModal(false)
     }
 
+    // Approve selected rows (mark as completed)
+    const handleApproveSelected = () => {
+        selectedRowIds.forEach(rowId => {
+            updateProjectRow(id, rowId, { status: 'completed' })
+        })
+        deselectAllRows(id)
+    }
+
+    // Reject selected rows (mark as pending)
+    const handleRejectSelected = () => {
+        selectedRowIds.forEach(rowId => {
+            updateProjectRow(id, rowId, { status: 'pending' })
+        })
+        deselectAllRows(id)
+    }
+
+    // Delete selected rows
+    const handleDeleteSelected = async () => {
+        if (!confirm(`Are you sure you want to delete ${selectedRowIds.size} row(s)? This action cannot be undone.`)) {
+            return
+        }
+        await deleteRows(id, Array.from(selectedRowIds))
+    }
+
+    // Get review items (rows with status 'review')
+    const reviewItems = allRows.filter(r => r.status === 'review')
+
     return (
         <div className="space-y-6 w-full">
-            {/* Hidden file input for import */}
             <input
                 type="file"
                 ref={fileInputRef}
@@ -254,359 +273,325 @@ export default function ProjectView({ projectId }) {
             />
 
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{project.name}</h1>
-                    <p className="text-sm text-zinc-500 mt-1">
+                    <h1 className="text-xl font-semibold text-foreground">{project.name}</h1>
+                    <p className="text-sm text-muted-foreground mt-1">
                         {project.sourceLanguage} → {project.targetLanguages?.join(", ")}
                     </p>
                 </div>
 
-                {/* Page Tabs (when multi-sheet project) */}
-                {pages.length > 0 && (
-                    <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl overflow-x-auto">
-                        {pages.map((page) => (
-                            <button
-                                key={page.id}
-                                onClick={() => selectPage(id, page.id)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${currentPageId === page.id
+                <div className="flex items-center gap-2 flex-wrap">
+                    {pages.length > 0 && (
+                        <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl overflow-x-auto">
+                            {pages.map((page) => (
+                                <button
+                                    key={page.id}
+                                    onClick={() => selectPage(id, page.id)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${currentPageId === page.id
                                         ? 'bg-card text-foreground shadow-sm'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-card/50'
-                                    }`}
-                            >
-                                {page.name}
-                            </button>
-                        ))}
+                                        : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                >
+                                    {page.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
+                        {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    </Button>
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setShowAddRowModal(true)}>
+                        <Plus className="w-4 h-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={handleExport}>
+                        <Download className="w-4 h-4" />
+                    </Button>
+                </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-xl p-4 bg-card border">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> Total
                     </div>
-                )}
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isImporting}
-                    >
-                        {isImporting ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                            <Upload className="w-4 h-4 mr-2" />
+                    <span className="text-2xl font-light">{totalRows}</span>
+                </div>
+                <div className="rounded-xl p-4 bg-card border">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Translated
+                    </div>
+                    <span className="text-2xl font-light">{translatedRows}</span>
+                </div>
+                <div className="rounded-xl p-4 bg-card border">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                        <Clock className="w-3.5 h-3.5" /> Review
+                    </div>
+                    <span className="text-2xl font-light">{pendingReview}</span>
+                </div>
+                <div className="rounded-xl p-4 bg-card border">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                        <Languages className="w-3.5 h-3.5" /> Progress
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-2xl font-light">{progress}%</span>
+                        <Progress value={progress} className="flex-1 h-1.5" />
+                    </div>
+                </div>
+            </div>
+
+            {/* View Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
+                <TabsList className="grid w-full grid-cols-2 h-9 p-1 rounded-lg">
+                    <TabsTrigger value="translation" className="rounded-md text-xs gap-1.5">
+                        <Languages className="w-3.5 h-3.5" /> Translation
+                    </TabsTrigger>
+                    <TabsTrigger value="review" className="rounded-md text-xs gap-1.5">
+                        <Clock className="w-3.5 h-3.5" /> Review
+                        {reviewItems.length > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium">
+                                {reviewItems.length}
+                            </span>
                         )}
-                        {isImporting ? 'Importing...' : 'Import Sheet'}
-                    </Button>
-                    <Button
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={() => setShowAddRowModal(true)}
-                    >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Row
-                    </Button>
-                    <Button variant="outline" className="rounded-xl" onClick={handleExport}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Export
-                    </Button>
-                </div>
-            </div>
-
-            {/* Stats Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="rounded-2xl p-5 bg-card border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                            <FileSpreadsheet className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <span className="text-sm text-muted-foreground">Total Rows</span>
-                    </div>
-                    <span className="text-3xl font-light">{totalRows}</span>
-                </div>
-
-                <div className="rounded-2xl p-5 bg-card border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                            <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                        <span className="text-sm text-muted-foreground">Translated</span>
-                    </div>
-                    <span className="text-3xl font-light">{translatedRows}</span>
-                </div>
-
-                <div className="rounded-2xl p-5 bg-card border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                        </div>
-                        <span className="text-sm text-muted-foreground">Pending Review</span>
-                    </div>
-                    <span className="text-3xl font-light">{pendingReview}</span>
-                </div>
-
-                <div className="rounded-2xl p-5 bg-card border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-                            <Languages className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                        </div>
-                        <span className="text-sm text-muted-foreground">Progress</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <span className="text-3xl font-light">{progress}%</span>
-                        <Progress value={progress} className="flex-1 h-2" />
-                    </div>
-                </div>
-            </div>
+                    </TabsTrigger>
+                </TabsList>
+            </Tabs>
 
             {/* Selection Toolbar */}
             {selectedCount > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-xl bg-primary/5 border border-primary/20">
-                    <span className="text-sm font-medium">
-                        {selectedCount} row{selectedCount > 1 ? 's' : ''} selected
-                    </span>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                    <span className="text-sm font-medium">{selectedCount} selected</span>
                     <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => deselectAllRows(id)}>
-                            Clear
-                        </Button>
-                        <div className="relative">
-                            <Button
-                                size="sm"
-                                className="rounded-xl gap-2"
-                                onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-                                disabled={isProcessing}
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Processing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="w-4 h-4" />
-                                        Translate Selected
-                                        <ChevronDown className="w-4 h-4" />
-                                    </>
-                                )}
-                            </Button>
+                        <Button variant="ghost" size="sm" onClick={() => deselectAllRows(id)}>Clear</Button>
 
-                            {/* Template Dropdown */}
-                            {showTemplateDropdown && (
-                                <div className="absolute right-0 top-full mt-2 w-64 bg-popover border border-border rounded-xl shadow-lg z-50">
-                                    <div className="p-2">
-                                        <p className="text-xs text-muted-foreground px-2 py-1 mb-1">Select Prompt Template</p>
+                        <div className="h-4 w-px bg-border/50 mx-2" />
+
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={handleDeleteSelected}
+                        >
+                            <Trash2 className="w-4 h-4 mr-1.5" /> Delete
+                        </Button>
+
+                        <div className="h-4 w-px bg-border/50 mx-2" />
+
+                        {/* Review Actions (only in review mode for managers+) */}
+                        {activeTab === "review" && canDo(ACTIONS.APPROVE_TRANSLATION) && (
+                            <>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-xl gap-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                    onClick={handleApproveSelected}
+                                >
+                                    <Check className="w-4 h-4" /> Approve
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-xl gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={handleRejectSelected}
+                                >
+                                    <XCircle className="w-4 h-4" /> Reject
+                                </Button>
+                            </>
+                        )}
+
+                        {/* Translation Actions (only in translation mode) */}
+                        {activeTab === "translation" && (
+                            <div className="relative">
+                                <Button
+                                    size="sm"
+                                    className="rounded-xl gap-2"
+                                    onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
+                                    disabled={isProcessing}
+                                >
+                                    {isProcessing ? (
+                                        <><Loader2 className="w-4 h-4 animate-spin" /> Translating {queueProgress.current}/{queueProgress.total}...</>
+                                    ) : (
+                                        <><Sparkles className="w-4 h-4" /> Translate</>
+                                    )}
+                                </Button>
+                                {showTemplateDropdown && (
+                                    <div className="absolute right-0 top-full mt-2 w-56 bg-popover border rounded-xl shadow-lg z-50 p-2">
+                                        <p className="text-xs text-muted-foreground px-2 py-1 mb-1">Select Prompt</p>
                                         {templates.map(template => (
                                             <button
                                                 key={template.id}
                                                 onClick={() => handleTranslateWithTemplate(template)}
-                                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-accent text-sm flex items-center gap-2"
+                                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-accent text-sm"
                                             >
-                                                <div className={`w-6 h-6 rounded-md ${template.iconBg || 'bg-zinc-100'} flex items-center justify-center`}>
-                                                    {template.icon && <template.icon className={`w-3 h-3 ${template.iconColor || 'text-zinc-600'}`} />}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium">{template.name}</p>
-                                                    <p className="text-xs text-muted-foreground truncate">{template.tags?.join(', ')}</p>
-                                                </div>
+                                                {template.name}
                                             </button>
                                         ))}
                                     </div>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
             {/* Queue Progress */}
             {isProcessing && queueProgress.total > 0 && (
-                <div className="flex items-center gap-4 p-4 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
+                <div className="flex items-center gap-4 p-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
                     <Loader2 className="w-5 h-5 animate-spin text-violet-600 flex-shrink-0" />
                     <div className="flex-1">
-                        <p className="text-sm font-medium text-violet-900 dark:text-violet-100">
-                            Processing batch {queueProgress.current + 1} of {queueProgress.total}
-                        </p>
-                        <Progress value={((queueProgress.current) / queueProgress.total) * 100} className="h-1.5 mt-2" />
+                        <p className="text-sm font-medium">Batch {queueProgress.current + 1}/{queueProgress.total}</p>
+                        <Progress value={(queueProgress.current / queueProgress.total) * 100} className="h-1.5 mt-1" />
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={cancelTranslationQueue}
-                        className="text-violet-700 hover:text-violet-900 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-violet-800"
-                    >
-                        <X className="w-4 h-4 mr-1" />
-                        Cancel
+                    <Button variant="ghost" size="sm" onClick={cancelTranslationQueue}>
+                        <X className="w-4 h-4" />
                     </Button>
                 </div>
             )}
 
-            {/* Translation Items */}
-            <div className="space-y-2">
-                {/* Quick Actions Bar */}
-                <div className="flex items-center justify-between px-1 py-2">
-                    <div className="flex items-center gap-2">
-                        <button onClick={handleSelectAll} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-                            {selectedCount === rows.length && rows.length > 0 ? (
-                                <CheckSquare className="w-4 h-4 text-primary" />
-                            ) : (
-                                <Square className="w-4 h-4" />
-                            )}
-                            Select all
-                        </button>
-                        {rows.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                                {rows.length} item{rows.length > 1 ? 's' : ''}
-                            </span>
+            {/* Filter Bar */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                    <button onClick={handleSelectAll} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                        {selectedCount === rows.length && rows.length > 0 ? (
+                            <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                            <Square className="w-4 h-4" />
                         )}
-                    </div>
+                        Select all
+                    </button>
+                    <span className="text-xs text-muted-foreground">({rows.length} items)</span>
                 </div>
 
-                {/* Translation Keys - Lokalise Style */}
-                {rows.map((row) => {
-                    const isSelected = selectedRowIds.has(row.id)
-                    const isTranslating = row.status === 'translating'
-                    const isError = row.status === 'error'
+                <div className="flex items-center gap-2">
+                    {/* Status Filter */}
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="h-8 px-3 rounded-lg border bg-background text-sm"
+                    >
+                        <option value="all">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                        <option value="review">Review</option>
+                        <option value="error">Error</option>
+                    </select>
 
-                    // Language row helper component
-                    const LanguageRow = ({ lang, label, value, isSource = false }) => {
-                        const isEditing = editingCell?.rowId === row.id && editingCell?.field === lang
-                        const isEmpty = !value
-
-                        return (
-                            <div className={`flex border-t border-border/50 ${isSource ? 'bg-muted/20' : ''}`}>
-                                {/* Language Label */}
-                                <div className="w-36 flex-shrink-0 px-4 py-3 border-r border-border/50 flex items-center">
-                                    <span className={`text-xs ${isSource ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                                        {label}
-                                    </span>
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1 px-4 py-3">
-                                    {isSource ? (
-                                        <p className="text-sm">{value}</p>
-                                    ) : isEditing ? (
-                                        <textarea
-                                            autoFocus
-                                            value={editValue}
-                                            onChange={(e) => setEditValue(e.target.value)}
-                                            onBlur={handleCellSave}
-                                            onKeyDown={handleKeyDown}
-                                            className="w-full text-sm p-2 -m-2 border rounded-lg bg-background resize-none min-h-[60px] focus:ring-2 focus:ring-primary/20"
-                                        />
-                                    ) : (
-                                        <div
-                                            onClick={() => !isSource && handleCellClick(row.id, lang, value)}
-                                            className={`text-sm min-h-[20px] cursor-text ${isEmpty ? 'text-orange-500 dark:text-orange-400' : ''
-                                                }`}
-                                        >
-                                            {value || 'Empty'}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )
-                    }
-
-                    return (
-                        <div
-                            key={row.id}
-                            className={`rounded-xl border overflow-hidden transition-all duration-200 ${isSelected
-                                ? 'border-primary/40 ring-1 ring-primary/20'
-                                : isTranslating
-                                    ? 'border-violet-300 dark:border-violet-700'
-                                    : isError
-                                        ? 'border-red-300 dark:border-red-700'
-                                        : 'border-border hover:border-border/80'
-                                }`}
-                        >
-                            {/* Key Header Row */}
-                            <div className={`flex items-center gap-3 px-4 py-3 ${isSelected ? 'bg-primary/5' : 'bg-card'
-                                }`}>
-                                <button
-                                    onClick={() => toggleRowSelection(id, row.id)}
-                                    className="p-0.5 hover:bg-muted rounded flex-shrink-0"
-                                >
-                                    {isSelected ? (
-                                        <CheckSquare className="w-4 h-4 text-primary" />
-                                    ) : (
-                                        <Square className="w-4 h-4 text-muted-foreground" />
-                                    )}
-                                </button>
-
-                                <span className="text-sm font-medium text-muted-foreground flex-1 truncate">
-                                    {row.key || row.id}
-                                </span>
-
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="secondary" className={`text-xs ${statusColors[row.status] || statusColors.pending}`}>
-                                        {isTranslating && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                                        {isError && <AlertCircle className="w-3 h-3 mr-1" />}
-                                        {statusLabels[row.status] || 'Pending'}
-                                    </Badge>
-                                    {row.templateUsed && (
-                                        <span className="text-[10px] text-muted-foreground hidden sm:inline">
-                                            via {row.templateUsed}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Stacked Language Rows */}
-                            <div className="bg-card">
-                                <LanguageRow
-                                    lang="en"
-                                    label="English"
-                                    value={row.en || row.source}
-                                    isSource={true}
-                                />
-                                <LanguageRow
-                                    lang="zh"
-                                    label="Chinese Simplified (China)"
-                                    value={row.zh}
-                                />
-                                <LanguageRow
-                                    lang="my"
-                                    label="Malay (Malaysia)"
-                                    value={row.my}
-                                />
-                            </div>
-                        </div>
-                    )
-                })}
-
-                {/* Empty State */}
-                {rows.length === 0 && (
-                    <div className="py-20 text-center rounded-2xl border-2 border-dashed border-border">
-                        <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                            <FileSpreadsheet className="w-7 h-7 text-muted-foreground" />
-                        </div>
-                        <h3 className="font-semibold mb-2">No translation content yet</h3>
-                        <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                            Import an Excel file to add content for translation, or add rows manually.
-                        </p>
+                    {/* Search */}
+                    <div className="relative">
+                        <Input
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="h-8 w-40 pl-3 pr-8 rounded-lg text-sm"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2">
+                                <X className="w-3.5 h-3.5 text-muted-foreground" />
+                            </button>
+                        )}
                     </div>
-                )}
+
+                    {/* View Toggle */}
+                    <div className="flex items-center bg-muted/50 rounded-lg p-0.5">
+                        <button
+                            onClick={() => setViewMode("inline")}
+                            className={`p-1.5 rounded-md ${viewMode === "inline" ? "bg-card shadow-sm" : ""}`}
+                        >
+                            <List className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode("table")}
+                            className={`p-1.5 rounded-md ${viewMode === "table" ? "bg-card shadow-sm" : ""}`}
+                        >
+                            <Table className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
             </div>
+
+            {/* Content */}
+            {viewMode === "inline" ? (
+                <div className="space-y-2">
+                    {rows.map(row => (
+                        <InlineRow
+                            key={row.id}
+                            row={row}
+                            isSelected={selectedRowIds.has(row.id)}
+                            editingCell={editingCell}
+                            editValue={editValue}
+                            onToggleSelection={() => toggleRowSelection(id, row.id)}
+                            onCellClick={handleCellClick}
+                            onEditChange={setEditValue}
+                            onCellSave={handleCellSave}
+                            onKeyDown={handleKeyDown}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <div className="rounded-xl border overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-muted/50">
+                            <tr className="border-b">
+                                <th className="p-3 w-10"></th>
+                                <th className="p-3 text-left text-xs font-medium text-muted-foreground">Source (EN)</th>
+                                <th className="p-3 text-left text-xs font-medium text-muted-foreground">🇨🇳 Chinese</th>
+                                <th className="p-3 text-left text-xs font-medium text-muted-foreground">🇲🇾 Malay</th>
+                                <th className="p-3 text-left text-xs font-medium text-muted-foreground w-28">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map(row => (
+                                <TableRow
+                                    key={row.id}
+                                    row={row}
+                                    isSelected={selectedRowIds.has(row.id)}
+                                    editingCell={editingCell}
+                                    editValue={editValue}
+                                    onToggleSelection={() => toggleRowSelection(id, row.id)}
+                                    onCellClick={handleCellClick}
+                                    onEditChange={setEditValue}
+                                    onCellSave={handleCellSave}
+                                    onKeyDown={handleKeyDown}
+                                />
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* Empty State */}
+            {rows.length === 0 && (
+                <div className="py-16 text-center rounded-2xl border-2 border-dashed">
+                    <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileSpreadsheet className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-semibold mb-2">No content found</h3>
+                    <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                        {statusFilter !== "all" || searchQuery
+                            ? "Try adjusting your filters or search query."
+                            : "Import an Excel file to add content."}
+                    </p>
+                </div>
+            )}
 
             {/* Footer */}
             <div className="text-sm text-muted-foreground">
                 Last updated: {project.lastUpdated || 'Recently'}
             </div>
 
-            {/* Click outside to close dropdown */}
+            {/* Dropdowns backdrop */}
             {showTemplateDropdown && (
-                <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowTemplateDropdown(false)}
-                />
+                <div className="fixed inset-0 z-40" onClick={() => setShowTemplateDropdown(false)} />
             )}
 
             {/* Add Row Modal */}
             {showAddRowModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                    <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
                         <div className="flex items-center justify-between p-5 border-b">
                             <h2 className="text-lg font-semibold">Add Translation Row</h2>
-                            <button
-                                onClick={() => setShowAddRowModal(false)}
-                                className="p-2 hover:bg-muted rounded-lg transition-colors"
-                            >
+                            <button onClick={() => setShowAddRowModal(false)} className="p-2 hover:bg-muted rounded-lg">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -614,28 +599,19 @@ export default function ProjectView({ projectId }) {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">English Source Text</label>
                                 <textarea
-                                    placeholder="Enter the English text to translate..."
+                                    placeholder="Enter the English text..."
                                     value={newRowText}
                                     onChange={(e) => setNewRowText(e.target.value)}
-                                    className="w-full min-h-[100px] p-3 rounded-xl border bg-background resize-none focus:ring-2 focus:ring-primary/20"
+                                    className="w-full min-h-[100px] p-3 rounded-xl border bg-background resize-none"
                                     autoFocus
                                 />
                             </div>
                             <div className="flex gap-3">
-                                <Button
-                                    variant="outline"
-                                    className="flex-1"
-                                    onClick={() => setShowAddRowModal(false)}
-                                >
+                                <Button variant="outline" className="flex-1" onClick={() => setShowAddRowModal(false)}>
                                     Cancel
                                 </Button>
-                                <Button
-                                    className="flex-1"
-                                    onClick={handleAddRow}
-                                    disabled={!newRowText.trim()}
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Add Row
+                                <Button className="flex-1" onClick={handleAddRow} disabled={!newRowText.trim()}>
+                                    <Plus className="w-4 h-4 mr-2" /> Add Row
                                 </Button>
                             </div>
                         </div>

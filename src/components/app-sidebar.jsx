@@ -2,12 +2,11 @@ import * as React from "react"
 import {
   Settings2,
   Languages,
-  House,
   BookOpen,
   Library,
   Folder,
   Search,
-  FileText
+  FileText,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -24,11 +23,6 @@ import { useProjects } from "@/context/ProjectContext"
 
 // Navigation Groups
 const navEssentials = [
-  {
-    title: "Home",
-    url: "#",
-    icon: House,
-  },
   {
     title: "Projects",
     url: "#projects",
@@ -63,12 +57,15 @@ export function AppSidebar({ ...props }) {
   const { user } = useAuth()
   const { projects } = useProjects()
 
-  // Dynamic projects list (show up to 5 recent)
-  const navProjects = projects.slice(0, 5).map(project => ({
-    title: project.name,
-    url: `#project/${project.id}`,
-    icon: FileText,
-  }))
+  // Dynamic projects list (show up to 5 recent, sorted by lastUpdated)
+  const navProjects = [...projects]
+    .sort((a, b) => new Date(b.lastUpdated || 0) - new Date(a.lastUpdated || 0))
+    .slice(0, 5)
+    .map(project => ({
+      title: project.name,
+      url: `#project/${project.id}`,
+      icon: FileText,
+    }))
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar" {...props}>

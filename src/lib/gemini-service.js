@@ -1,12 +1,12 @@
 // Gemini AI Service for Translation
 // Uses @google/genai SDK to call Gemini API
+// Includes glossary integration and template variable substitution
 
 import { GoogleGenAI } from "@google/genai";
 
 // Initialize the client - API key from environment variable
-// Uses GEMINI_API_KEY as expected by Google's SDK
 const getClient = () => {
-    const apiKey = import.meta.env.GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
     if (!apiKey) {
         console.warn('GEMINI_API_KEY not found in .env file.');
         return null;
@@ -15,20 +15,87 @@ const getClient = () => {
 };
 
 /**
+ * Language code to name mapping
+ */
+const LANGUAGE_NAMES = {
+    'en': 'English',
+    'my': 'Bahasa Malaysia (Malay)',
+    'zh': 'Simplified Chinese (中文)'
+};
+
+/**
+ * Build glossary section for prompt
+ * @param {Array} glossaryTerms - Array of {english, malay, chinese} terms
+ * @param {Array} targetLanguages - Target language codes ['my', 'zh']
+ * @returns {string} Formatted glossary section for prompt
+ */
+function buildGlossaryPrompt(glossaryTerms, targetLanguages) {
+    if (!glossaryTerms || glossaryTerms.length === 0) {
+        return '';
+    }
+
+    const lines = glossaryTerms.map(term => {
+        const translations = targetLanguages.map(lang => {
+            const langName = lang === 'my' ? 'Malay' : 'Chinese';
+            const value = lang === 'my' ? term.malay : term.chinese;
+            return value ? `${langName}: "${value}"` : null;
+        }).filter(Boolean).join(', ');
+
+        return `- "${term.english}" → ${translations}`;
+    });
+
+    return `
+## Glossary (IMPORTANT: Use these exact translations)
+The following terms MUST be translated exactly as specified:
+${lines.join('\n')}
+`;
+}
+
+/**
+ * Process template with variable substitution
+ * @param {Object} template - Template object with {name, prompt}
+ * @param {Array} targetLanguages - Target language codes
+ * @returns {string} Processed prompt with variables replaced
+ */
+function processTemplate(template, targetLanguages) {
+    if (!template?.prompt) {
+        return 'Translate accurately while maintaining the original meaning and tone.';
+    }
+
+    const targetLangStr = targetLanguages.map(l => LANGUAGE_NAMES[l] || l).join(' and ');
+
+    // Replace common template variables
+    let processed = template.prompt
+        .replace(/\{\{targetLanguage\}\}/gi, targetLangStr)
+        .replace(/\{\{target_language\}\}/gi, targetLangStr)
+        .replace(/\{targetLanguage\}/gi, targetLangStr)
+        .replace(/\{target_language\}/gi, targetLangStr);
+
+    return processed;
+}
+
+/**
  * Translate a batch of rows using Gemini AI
  * @param {Array} rows - Array of row objects with {id, en/source, context}
  * @param {Object} template - Prompt template with {name, prompt}
- * @param {Object} options - Translation options {targetLanguages: ['my', 'zh']}
+ * @param {Object} options - Translation options
+ * @param {Array} options.targetLanguages - Target language codes ['my', 'zh']
+ * @param {Array} options.glossaryTerms - Array of glossary terms
  * @returns {Promise<Array>} - Array of translated results
  */
 export async function translateBatch(rows, template, options = {}) {
-    const { targetLanguages = ['my', 'zh'] } = options;
+    const {
+        targetLanguages = ['my', 'zh'],
+        glossaryTerms = []
+    } = options;
+
     const startTime = Date.now();
 
     console.log('🚀 [Gemini API] Starting translation batch:', {
         rowCount: rows.length,
         template: template?.name || 'Default',
-        targetLanguages
+        targetLanguages,
+        glossaryTermCount: glossaryTerms.length
     });
 
     const ai = getClient();
@@ -39,11 +106,11 @@ export async function translateBatch(rows, template, options = {}) {
     // Build the translation prompt
     const sourceTexts = rows.map(row => ({
         id: row.id,
-        text: row.en || row.source,
+        text: row.en || row.english || row.source,
         context: row.context || row.description || ''
     }));
 
-    const prompt = buildTranslationPrompt(sourceTexts, template, targetLanguages);
+    const prompt = buildTranslationPrompt(sourceTexts, template, targetLanguages, glossaryTerms);
 
     console.log('📝 [Gemini API] Prompt built, sending request...');
 
@@ -53,7 +120,7 @@ export async function translateBatch(rows, template, options = {}) {
             contents: prompt,
         });
 
-        const text = response.text;
+        const text = response.text();
         const elapsed = Date.now() - startTime;
 
         console.log('✅ [Gemini API] Response received:', {
@@ -86,24 +153,28 @@ export async function translateBatch(rows, template, options = {}) {
 }
 
 /**
- * Build the translation prompt with template and context
+ * Build the translation prompt with template, glossary, and context
  */
-function buildTranslationPrompt(sourceTexts, template, targetLanguages) {
-    const languageNames = {
-        'my': 'Bahasa Malaysia (Malay)',
-        'zh': 'Simplified Chinese (中文)'
-    };
+function buildTranslationPrompt(sourceTexts, template, targetLanguages, glossaryTerms = []) {
+    const targetLangStr = targetLanguages.map(l => LANGUAGE_NAMES[l] || l).join(' and ');
 
-    const targetLangStr = targetLanguages.map(l => languageNames[l] || l).join(' and ');
+    // Process template with variable substitution
+    const styleInstruction = processTemplate(template, targetLanguages);
 
-    // Use template prompt or default
-    const styleInstruction = template?.prompt ||
-        'Translate accurately while maintaining the original meaning and tone.';
+    // Build glossary section
+    const glossarySection = buildGlossaryPrompt(glossaryTerms, targetLanguages);
 
-    const prompt = `You are a professional translator. Translate the following texts from English to ${targetLangStr}.
+    const prompt = `You are a professional translator for a Malaysian telecommunications company. Translate the following texts from English to ${targetLangStr}.
 
 ## Style Guidelines
 ${styleInstruction}
+${glossarySection}
+## Translation Requirements
+- Use Malaysian Bahasa (not Indonesian) for Malay translations
+- Use Simplified Chinese with Malaysian expressions for Chinese translations
+- Maintain professional but approachable tone
+- Preserve any placeholders like {name} or {{variable}} exactly as they appear
+- Maintain the same formatting (line breaks, punctuation style)
 
 ## Input
 I will provide you with a JSON array of objects. Each object has:
@@ -129,8 +200,8 @@ Example output format:
 
 IMPORTANT: 
 - Return ONLY the JSON array, no other text
-- Preserve any placeholders like {name} or {{variable}} exactly as they appear
-- Maintain the same formatting (e.g., if source has line breaks, keep them)`;
+- Apply glossary terms exactly as specified
+- If a glossary term appears in the source, use the exact translation from the glossary`;
 
     return prompt;
 }
@@ -153,7 +224,7 @@ function parseTranslationResponse(responseText, originalRows) {
 
         // Merge with original row data
         return originalRows.map(row => {
-            const translation = parsed.find(t => t.id === row.id);
+            const translation = parsed.find(t => String(t.id) === String(row.id));
             return {
                 id: row.id,
                 my: translation?.my || '',
@@ -177,11 +248,41 @@ function parseTranslationResponse(responseText, originalRows) {
 }
 
 /**
+ * Translate a single text (convenience wrapper)
+ * @param {string} sourceText - Text to translate
+ * @param {string} targetLanguage - 'my' or 'zh'
+ * @param {Object} options - {category, glossaryTerms}
+ * @returns {Promise<string>} Translated text
+ */
+export async function translateText(sourceText, targetLanguage, options = {}) {
+    const { category = 'general', glossaryTerms = [] } = options;
+
+    const template = {
+        name: category,
+        prompt: `Translate for ${category} context. Be accurate and natural.`
+    };
+
+    const results = await translateBatch(
+        [{ id: 1, en: sourceText }],
+        template,
+        {
+            targetLanguages: [targetLanguage],
+            glossaryTerms
+        }
+    );
+
+    return results[0]?.[targetLanguage] || '';
+}
+
+/**
  * Test the API connection
  */
 export async function testConnection() {
     try {
         const ai = getClient();
+        if (!ai) {
+            return { success: false, message: 'API key not configured' };
+        }
         const response = await ai.models.generateContent({
             model: "gemini-2.0-flash",
             contents: "Say 'API connection successful' in exactly those words.",
@@ -190,4 +291,15 @@ export async function testConnection() {
     } catch (error) {
         return { success: false, message: error.message };
     }
+}
+
+/**
+ * Get available models (for settings/debugging)
+ */
+export function getConfig() {
+    return {
+        apiKeyConfigured: !!import.meta.env.VITE_GEMINI_API_KEY,
+        model: 'gemini-2.0-flash',
+        supportedLanguages: ['en', 'my', 'zh']
+    };
 }

@@ -1,9 +1,9 @@
 // PromptContext - Centralized state management for prompt templates
 // Now with Firestore persistence
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { promptTemplates as mockPromptTemplates } from '@/data/mockData'
 import { FileText, Megaphone, Code, Scale, MessageSquare } from 'lucide-react'
 import * as firestoreService from '@/lib/firestore-service'
+import { toast } from "sonner"
 
 // Icon mapping for prompt templates
 const iconMap = {
@@ -15,7 +15,7 @@ const iconMap = {
 }
 
 // Feature flag - set to true to use Firestore
-const USE_FIRESTORE = true
+
 
 const PromptContext = createContext(null)
 
@@ -27,24 +27,13 @@ export function PromptProvider({ children }) {
     // Load templates from Firestore on mount
     useEffect(() => {
         async function loadData() {
-            if (!USE_FIRESTORE) {
-                // Use mock data
-                const enhanced = mockPromptTemplates.map(t => ({
-                    ...t,
-                    icon: iconMap[t.iconName] || FileText,
-                }))
-                setTemplates(enhanced)
-                setDataSource('mock')
-                setIsLoading(false)
-                return
-            }
-
             try {
                 console.log('🔄 [Firestore] Loading templates...')
                 let firestoreTemplates = await firestoreService.getTemplates()
 
                 if (firestoreTemplates.length === 0) {
                     // Seed default templates
+                    console.log('📦 [Firestore] Empty templates, seeding defaults...')
                     await firestoreService.seedDefaultTemplates()
                     firestoreTemplates = await firestoreService.getTemplates()
                 }
@@ -60,13 +49,8 @@ export function PromptProvider({ children }) {
                 console.log('✅ [Firestore] Loaded', firestoreTemplates.length, 'templates')
             } catch (error) {
                 console.error('❌ [Firestore] Error loading templates:', error)
-                // Fallback to mock
-                const enhanced = mockPromptTemplates.map(t => ({
-                    ...t,
-                    icon: iconMap[t.iconName] || FileText,
-                }))
-                setTemplates(enhanced)
-                setDataSource('mock')
+                toast.error("Failed to load templates")
+                setDataSource('error')
             } finally {
                 setIsLoading(false)
             }
@@ -86,43 +70,41 @@ export function PromptProvider({ children }) {
             author: template.author || 'You',
         }
 
-        if (dataSource === 'firestore') {
-            try {
-                const created = await firestoreService.createTemplate(templateData)
-                const enhanced = { ...created, icon: iconMap[created.iconName] || FileText }
-                setTemplates(prev => [enhanced, ...prev])
-                return enhanced
-            } catch (error) {
-                console.error('Error creating template:', error)
-                throw error
-            }
-        } else {
-            // Mock mode
-            const newTemplate = { ...templateData, id: String(Date.now()), icon: FileText }
-            setTemplates(prev => [newTemplate, ...prev])
-            return newTemplate
+        try {
+            const created = await firestoreService.createTemplate(templateData)
+            const enhanced = { ...created, icon: iconMap[created.iconName] || FileText }
+            setTemplates(prev => [enhanced, ...prev])
+            return enhanced
+        } catch (error) {
+            console.error('Error creating template:', error)
+            toast.error("Failed to create template")
+            throw error
         }
-    }, [dataSource])
+    }, [])
 
     // Update a template (with Firestore sync)
     const updateTemplate = useCallback(async (id, updates) => {
-        setTemplates(prev => prev.map(t =>
-            t.id === id ? { ...t, ...updates } : t
-        ))
-
-        if (dataSource === 'firestore') {
-            firestoreService.updateTemplate(id, updates).catch(console.error)
+        try {
+            await firestoreService.updateTemplate(id, updates)
+            setTemplates(prev => prev.map(t =>
+                t.id === id ? { ...t, ...updates } : t
+            ))
+        } catch (error) {
+            console.error("Failed to update template", error)
+            toast.error("Failed to update template")
         }
-    }, [dataSource])
+    }, [])
 
     // Delete a template (with Firestore sync)
     const deleteTemplate = useCallback(async (id) => {
-        setTemplates(prev => prev.filter(t => t.id !== id))
-
-        if (dataSource === 'firestore') {
-            firestoreService.deleteTemplate(id).catch(console.error)
+        try {
+            await firestoreService.deleteTemplate(id)
+            setTemplates(prev => prev.filter(t => t.id !== id))
+        } catch (error) {
+            console.error("Failed to delete template", error)
+            toast.error("Failed to delete template")
         }
-    }, [dataSource])
+    }, [])
 
     // Duplicate a template
     const duplicateTemplate = useCallback(async (id) => {
