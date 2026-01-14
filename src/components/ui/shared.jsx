@@ -20,6 +20,11 @@ export const COLORS = {
     white: '#FFFFFF',
     black: '#1C1C1C',
     tagBackground: '#E5ECF6',
+
+    // Blue Color System
+    blue: '#2F3BF5',        // Secondary / Blue Default
+    blueMedium: '#5174FF',  // Blue Medium (for translation buttons)
+    blueLight: '#C5DDFF',   // Blue Light
 }
 
 export const RADIUS = {

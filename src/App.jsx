@@ -48,9 +48,9 @@ class ErrorBoundary extends Component {
         if (this.state.hasError) {
             return (
                 <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-zinc-950 p-6">
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-red-200 dark:border-red-900 p-8 max-w-md w-full text-center">
-                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-pink-100 dark:border-pink-900/30 p-8 max-w-md w-full text-center">
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: '#FFB9DD' }}>
+                            <AlertCircle className="w-8 h-8" style={{ color: '#FF0084' }} />
                         </div>
                         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Something went wrong</h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
@@ -61,7 +61,8 @@ class ErrorBoundary extends Component {
                         </div>
                         <button
                             onClick={() => window.location.reload()}
-                            className="bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium w-full"
+                            className="text-white px-4 py-2 rounded-lg text-sm font-medium w-full hover:opacity-90 transition-opacity"
+                            style={{ backgroundColor: '#FF0084' }}
                         >
                             Refresh Page
                         </button>
@@ -97,7 +98,7 @@ function useRoute() {
 // Component that uses project context for breadcrumbs
 function AppWithRouting({ authContextValue }) {
     const route = useRoute()
-    const { getProject } = useProjects()
+    const { getProject, getProjectPages } = useProjects()
 
     // Get page component and breadcrumbs based on route
     const getPageConfig = () => {
@@ -108,7 +109,8 @@ function AppWithRouting({ authContextValue }) {
             case '':
                 return { component: Dashboard, breadcrumbs: [{ label: 'Home' }] }
             case 'projects':
-                return { component: Dashboard, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Projects' }] }
+                // Redirect alias for Home/Projects - keep breadcrumb as Home
+                return { component: Dashboard, breadcrumbs: [{ label: 'Home' }] }
             case 'glossary':
                 return { component: Glossary, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Glossary' }] }
             case 'prompt':
@@ -124,15 +126,36 @@ function AppWithRouting({ authContextValue }) {
             default:
                 if (path.startsWith('project/')) {
                     // Split to remove query string (e.g., "xxx?page=yyy" -> "xxx")
-                    const projectId = path.split('/')[1].split('?')[0]
+                    const parts = path.split('/')
+                    const projectIdPart = parts[1] || ''
+                    const [projectId, queryString] = projectIdPart.split('?')
+
                     const project = getProject(projectId)
                     const projectName = project?.name || `Project #${projectId.slice(0, 8)}...`
+
+                    // Subpage Breadcrumb Logic
+                    let subpageBreadcrumb = null
+
+                    // Parse ?page=xyz from the FULL route string or parts
+                    // route is like "#project/123?page=456"
+                    const urlParams = new URLSearchParams(route.split('?')[1])
+                    const pageId = urlParams.get('page')
+
+                    if (pageId) {
+                        const pages = getProjectPages(projectId) || []
+                        const page = pages.find(p => p.id === pageId)
+                        if (page) {
+                            subpageBreadcrumb = { label: page.name }
+                        }
+                    }
+
                     return {
                         component: ProjectView,
                         breadcrumbs: [
                             { label: 'Home', href: '#' },
-                            { label: 'Projects', href: '#projects' },
-                            { label: projectName }
+                            // { label: 'Projects', href: '#' }, // Removed "Projects" intermediate per request
+                            { label: projectName, href: `#project/${projectId}` }, // Link to project root
+                            ...(subpageBreadcrumb ? [subpageBreadcrumb] : [])
                         ],
                         projectId
                     }

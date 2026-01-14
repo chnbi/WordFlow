@@ -16,7 +16,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { GlossaryTermDialog } from "@/components/dialogs"
+import { GlossaryTermDialog, ConfirmDialog } from "@/components/dialogs"
 import { useAuth, ACTIONS } from "@/App"
 import { useGlossary } from "@/context/GlossaryContext"
 import { usePrompts } from "@/context/PromptContext"
@@ -58,6 +58,7 @@ export default function Glossary() {
     const [pendingNewTerms, setPendingNewTerms] = useState([])
     const [duplicates, setDuplicates] = useState([])
     const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false)
+    const [duplicateConfirm, setDuplicateConfirm] = useState(null) // { term, matchedTerm }
 
     // Translation handler - same logic as project page
     const handleTranslateAll = async () => {
@@ -131,6 +132,7 @@ export default function Glossary() {
             }
         } finally {
             setIsTranslating(false)
+            setSelectedIds([])
         }
     }
 
@@ -261,16 +263,23 @@ export default function Glossary() {
         const { duplicates } = findDuplicates([termToAdd])
         if (duplicates.length > 0) {
             const matchedTerm = duplicates[0].existing
-            if (!window.confirm(`Duplicate detected: "${matchedTerm.english}"\n\nAdd this term anyway?`)) {
-                return // User cancelled
-            }
+            // Show styled confirmation dialog
+            setDuplicateConfirm({ term: termToAdd, matchedTerm })
+            return // Wait for user response
         }
 
+        // No duplicate - proceed with adding
+        await addTermToGlossary(termToAdd)
+    }
+
+    // Helper to actually add term after confirmation
+    const addTermToGlossary = async (termToAdd) => {
         try {
             await addTerm(termToAdd)
             toast.success('Term added successfully')
             setIsAddingRow(false)
             setNewRow({ english: '', malay: '', chinese: '', category: 'General' })
+            setDuplicateConfirm(null)
         } catch (error) {
             toast.error('Failed to add term')
         }
@@ -649,33 +658,50 @@ export default function Glossary() {
                             </PillButton>
                         )}
 
-                        {/* Translate Again - show when selecting already-translated terms */}
-                        {hasSelection && allTranslated && !allApproved && (
-                            <PillButton
-                                variant="outline"
+                        {/* Translate Functions */}
+                        {/* Case 2: Pending (No Selection, Not all translated) -> Translate Empty */}
+                        {hasTerms && !hasSelection && !allTranslated && (
+                            <PrimaryButton
+                                style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium }}
                                 onClick={handleTranslateAll}
                                 disabled={isTranslating}
                             >
-                                <span style={{ fontSize: '14px' }}>✦</span> Translate Again
-                            </PillButton>
+                                {isTranslating ? (
+                                    <><Loader2 style={{ width: '14px', height: '14px', marginRight: '4px', animation: 'spin 1s linear infinite' }} /> Translating...</>
+                                ) : (
+                                    <><span style={{ fontSize: '14px' }}>✦</span> Translate</>
+                                )}
+                            </PrimaryButton>
                         )}
 
-                        {/* Primary Action Button - conditional based on state */}
-                        {!allApproved && hasTerms && (
+                        {/* Case 3: Translated (No Selection, All translated, Not all approved) -> Export + Send for Review */}
+                        {hasTerms && !hasSelection && allTranslated && !allApproved && (
+                            <>
+                                <PillButton
+                                    variant="outline"
+                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginRight: '8px' }}
+                                    onClick={handleExport}
+                                >
+                                    <Download style={{ width: '14px', height: '14px' }} /> Export
+                                </PillButton>
+                                <PrimaryButton
+                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px' }} // Pink
+                                    onClick={handleSendForReview}
+                                    disabled={isTranslating}
+                                >
+                                    <Send style={{ width: '14px', height: '14px' }} /> Send for Review
+                                </PrimaryButton>
+                            </>
+                        )}
+
+                        {/* Case 4 & 5: Selection (Pending or Review) -> Translate Only (Blue) */}
+                        {hasSelection && !allApproved && (
                             <PrimaryButton
-                                style={{ height: '32px', fontSize: '12px', padding: '0 16px' }}
-                                onClick={allTranslated ? handleSendForReview : handleTranslateAll}
+                                style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium }}
+                                onClick={handleTranslateAll}
                                 disabled={isTranslating}
                             >
-                                {isTranslating ? (
-                                    <><Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> Translating...</>
-                                ) : allTranslated ? (
-                                    <><Send style={{ width: '14px', height: '14px' }} /> Send for Review</>
-                                ) : hasSelection ? (
-                                    <><span style={{ fontSize: '14px' }}>✦</span> Translate {selectedIds.length} selected</>
-                                ) : (
-                                    <><span style={{ fontSize: '14px' }}>✦</span> Translate empty rows</>
-                                )}
+                                <span style={{ fontSize: '14px' }}>✦</span> Translate {selectedIds.length}
                             </PrimaryButton>
                         )}
                     </div>
@@ -901,6 +927,17 @@ export default function Glossary() {
                         </div>
                     </div>
                 )}
+
+                {/* Duplicate Confirmation Dialog */}
+                <ConfirmDialog
+                    open={!!duplicateConfirm}
+                    onClose={() => setDuplicateConfirm(null)}
+                    onConfirm={() => addTermToGlossary(duplicateConfirm?.term)}
+                    title="Duplicate Detected"
+                    message={`A term with similar content already exists: "${duplicateConfirm?.matchedTerm?.english}"\n\nDo you want to add this term anyway?`}
+                    confirmLabel="Add Anyway"
+                    variant="default"
+                />
             </div>
         </TooltipProvider >
     )

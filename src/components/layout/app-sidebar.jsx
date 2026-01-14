@@ -507,16 +507,17 @@ export function AppSidebar({ ...props }) {
   }, [projects, getProjectPages, getPageRows, getProjectRows, glossaryTerms])
 
   const glossaryPendingCount = glossaryTerms.filter(t => t.status === 'review').length
+  const glossaryApprovedCount = glossaryTerms.filter(t => t.status === 'approved').length
   const projectsInProgress = projects.filter(p => p.status === 'in-progress').length
 
   // Dynamic nav items with badges
   const navEssentialsWithBadges = [
-    { title: "Projects", url: "#projects", icon: Folder, badge: projectsInProgress },
-    { title: "Glossary", url: "#glossary", icon: BookOpen, badge: glossaryPendingCount },
-    { title: "Approvals", url: "#approvals", icon: Edit3, badge: pendingApprovals },
+    // { title: "Projects", url: "#projects", icon: Folder, badge: projectsInProgress }, // Removed as per request
+    { title: "Approvals", url: "#approvals", icon: Edit3, badge: pendingApprovals > 0 ? pendingApprovals : undefined },
     { title: "Translate", url: "#image-translate", icon: Languages },
     { title: "Quick Check", url: "#quick-check", icon: Sparkles },
-    { title: "Prompt Library", url: "#prompt", icon: Library },
+    { title: "Glossary", url: "#glossary", icon: BookOpen, badge: glossaryApprovedCount > 0 ? glossaryApprovedCount : undefined },
+    { title: "Prompt Library", url: "#prompt", icon: Library }, // Approved count for Glossary
   ]
 
   // Dynamic projects list (show up to 5 recent, sorted by lastUpdated)

@@ -29,7 +29,7 @@ function findGlossaryMatches(text, glossaryTerms, languageCode) {
     const matches = []
 
     for (const term of glossaryTerms) {
-        const termValue = term[lang.field]
+        const termValue = term[lang.field]?.trim()
         if (!termValue) continue
 
         // Word boundaries for EN, exact match for ZH
@@ -98,8 +98,8 @@ function HighlightedText({ text, matches, hoveredTermId, onHover }) {
                     color: '#FF0084',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    backgroundColor: isHovered ? '#FFB9DD' : 'transparent',
-                    borderRadius: isHovered ? '4px' : 0,
+                    backgroundColor: isHovered ? 'hsl(329, 100%, 96%)' : 'transparent',
+                    borderRadius: '4px',
                     padding: isHovered ? '0 2px' : 0,
                     transition: 'background-color 0.15s ease',
                 }}
@@ -168,9 +168,10 @@ export default function QuickCheck() {
 
         try {
             const results = await translateBatch(
-                [{ id: 1, en: sourceText }],
+                [{ id: 1, [sourceLanguage]: sourceText }],
                 defaultTemplate,
                 {
+                    sourceLanguage: sourceLanguage,
                     targetLanguages: [targetLanguage],
                     glossaryTerms: glossaryTerms || []
                 }
@@ -197,9 +198,8 @@ export default function QuickCheck() {
 
     const handleSourceChange = (e) => {
         setSourceText(e.target.value)
-        // Reset translation state when source changes
+        // Disable glossary highlighting when editing (will re-enable on translate)
         setHasTranslated(false)
-        setTranslatedText('')
     }
 
     const handleSwapLanguages = () => {
@@ -271,33 +271,50 @@ export default function QuickCheck() {
 
             {/* Input/Output Areas - BIGGER BOXES */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                {/* Source - Show highlighted version after translate, textarea before */}
+                {/* Source - Always editable with highlighted overlay after translation */}
                 <div>
                     <label className="text-sm font-medium text-muted-foreground mb-2 block">
                         Source Text
+                        {hasTranslated && sourceMatches.length > 0 && (
+                            <span className="ml-2 text-xs text-pink-500">({sourceMatches.length} glossary matches)</span>
+                        )}
                     </label>
-                    {hasTranslated && sourceMatches.length > 0 ? (
-                        // After translation: show highlighted text in a styled box
+                    <div className="relative border rounded-lg bg-background min-h-[300px]">
+                        {/* Highlighted overlay for Source - Always visible behind transparent textarea */}
                         <div
-                            className="min-h-[300px] p-4 border rounded-lg bg-background text-foreground leading-relaxed"
-                            style={{ whiteSpace: 'pre-wrap' }}
+                            className="absolute inset-0 p-4 pointer-events-none leading-relaxed whitespace-pre-wrap break-words z-0"
+                            style={{ fontFamily: 'inherit' }}
                         >
-                            <HighlightedText
-                                text={sourceText}
-                                matches={sourceMatches}
-                                hoveredTermId={hoveredTermId}
-                                onHover={setHoveredTermId}
-                            />
+                            {/* Only show highlighting if we have matches and translation is done/active */}
+                            {hasTranslated && sourceMatches.length > 0 ? (
+                                <HighlightedText
+                                    text={sourceText}
+                                    matches={sourceMatches}
+                                    hoveredTermId={hoveredTermId}
+                                    onHover={() => { }}
+                                />
+                            ) : (
+                                <span className="opacity-0">{sourceText || ' '}</span> /* Keep layout stable */
+                            )}
                         </div>
-                    ) : (
-                        // Before translation: show editable textarea
+
+                        {/* Editable textarea - Transparent text (visible cursor) sitting on top */}
                         <textarea
                             value={sourceText}
                             onChange={handleSourceChange}
                             placeholder="Enter text to translate..."
-                            className="w-full min-h-[300px] p-4 border rounded-lg bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 leading-relaxed"
+                            spellCheck={false}
+                            className={`
+                                relative z-10 block w-full h-full min-h-[300px] p-4 
+                                bg-transparent resize-none border-none focus:ring-2 focus:ring-primary/20 focus:outline-none 
+                                leading-relaxed
+                            `}
+                            style={{
+                                color: hasTranslated && sourceMatches.length > 0 ? 'transparent' : 'inherit',
+                                caretColor: 'hsl(222, 47%, 11%)' // Always visible black cursor
+                            }}
                         />
-                    )}
+                    </div>
                 </div>
 
                 {/* Target */}
@@ -368,17 +385,7 @@ export default function QuickCheck() {
                 </div>
             )}
 
-            {/* Edit button to go back to editing mode */}
-            {hasTranslated && (
-                <div className="flex justify-center mt-4">
-                    <Button
-                        variant="outline"
-                        onClick={() => setHasTranslated(false)}
-                    >
-                        Edit Source Text
-                    </Button>
-                </div>
-            )}
+
         </div>
     )
 }

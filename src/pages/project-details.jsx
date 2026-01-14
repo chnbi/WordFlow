@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { getStatusConfig } from "@/lib/constants"
+import { ConfirmDialog } from "@/components/dialogs"
 
 
 export default function ProjectView({ projectId }) {
@@ -56,6 +57,8 @@ export default function ProjectView({ projectId }) {
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState([]) // Multi-selectable status filter
     const [waitTimeout, setWaitTimeout] = useState(false) // Timeout for waiting for project
+    const [deleteConfirm, setDeleteConfirm] = useState(null) // { type: 'bulk' | 'single', data: any }
+    const [duplicateConfirm, setDuplicateConfirm] = useState(null) // { row: object, duplicate: object }
 
     const fileInputRef = useRef(null)
 
@@ -113,14 +116,15 @@ export default function ProjectView({ projectId }) {
     const selectedCount = selectedRowIds.size
     const hasSelection = selectedCount > 0
 
-    // Compute button state conditions based on requirementss.txt
+    // Helper variables for Action Bar Logic
     const hasRows = rows.length > 0
-    const relevantRows = hasSelection
-        ? rows.filter(row => selectedRowIds.has(row.id))
-        : rows
-    const hasEmptyTranslations = relevantRows.some(row => !row.my?.trim() || !row.zh?.trim())
-    const allTranslated = hasRows && !relevantRows.some(row => !row.my?.trim() || !row.zh?.trim())
-    const allApproved = hasRows && rows.every(row => row.status === 'approved')
+    // 'review' or 'approved' counts as translated for button logic
+    // OR if content is present (user manually filled it)
+    const allTranslated = hasRows && rows.every(r =>
+        (r.status === 'review' || r.status === 'approved') ||
+        (r.my?.trim() && r.zh?.trim())
+    )
+    const allApproved = hasRows && rows.every(r => r.status === 'approved')
 
     // Show loading state while Firestore data is being fetched
     // Also show loading if project ID is present but project not found (newly created - race condition)
@@ -151,6 +155,8 @@ export default function ProjectView({ projectId }) {
             </div>
         )
     }
+
+
 
     // Handlers
     const handleSelectAll = () => {
@@ -265,18 +271,13 @@ export default function ProjectView({ projectId }) {
         // Check for duplicates
         const duplicate = findDuplicateRow(newRow, rows)
         if (duplicate) {
-            if (!window.confirm(`Duplicate detected: "${duplicate.en}"\n\nAdd this row anyway?`)) {
-                return // User cancelled
-            }
+            // Show styled confirmation dialog
+            setDuplicateConfirm({ row: newRow, duplicate })
+            return // Wait for user response
         }
 
-        if (pages.length > 0 && currentPageId) {
-            await addPageRows(id, currentPageId, [newRow])
-        } else {
-            await addProjectRows(id, [newRow])
-        }
-        setNewRowData({ en: '', my: '', zh: '' })
-        setIsAddingRow(false)
+        // No duplicate - proceed with adding
+        await addRowToProject(newRow)
     }
 
     const handleCancelAddRow = () => {
@@ -296,19 +297,33 @@ export default function ProjectView({ projectId }) {
 
     const handleBulkDelete = async () => {
         if (selectedCount === 0) return
+        // Show styled confirmation dialog
+        setDeleteConfirm({ type: 'bulk', count: selectedCount })
+    }
 
-        if (!window.confirm(`Are you sure you want to delete ${selectedCount} selected rows?`)) {
-            return
-        }
-
+    // Actually perform bulk delete after confirmation
+    const performBulkDelete = async () => {
         try {
             await deleteRows(id, selectedRowIds)
             deselectAllRows(id)
-            toast.success(`Deleted ${selectedCount} rows`)
+            toast.success(`Deleted ${deleteConfirm.count} rows`)
         } catch (error) {
             console.error('Delete failed:', error)
             toast.error('Failed to delete rows')
         }
+        setDeleteConfirm(null)
+    }
+
+    // Helper function to add row (used after duplicate confirmation too)
+    const addRowToProject = async (newRow) => {
+        if (pages.length > 0 && currentPageId) {
+            await addPageRows(id, currentPageId, [newRow])
+        } else {
+            await addProjectRows(id, [newRow])
+        }
+        setNewRowData({ en: '', my: '', zh: '' })
+        setIsAddingRow(false)
+        setDuplicateConfirm(null)
     }
 
     const getPromptName = (promptId) => {
@@ -361,8 +376,11 @@ export default function ProjectView({ projectId }) {
                 toast.info(`Translating ${rowsToTranslate.length} empty rows...`)
             }
 
-            // Get the default template or first available
-            const defaultTemplate = templates.find(t => t.isDefault) || templates[0] || {
+            // Get the default template - EXCLUDE DRAFTS (only published or review)
+            const publishedTemplates = templates.filter(t => t.status !== 'draft')
+            const defaultTemplate = publishedTemplates.find(t => t.isDefault) ||
+                publishedTemplates[0] ||
+            {
                 name: 'Default',
                 prompt: 'Translate accurately while maintaining the original meaning and tone.'
             }
@@ -410,6 +428,7 @@ export default function ProjectView({ projectId }) {
             }
         } finally {
             setIsTranslating(false)
+            deselectAllRows(id)
         }
     }
 
@@ -527,7 +546,7 @@ export default function ProjectView({ projectId }) {
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* Search */}
+                    {/* Search - Always available */}
                     <div style={{ position: 'relative' }}>
                         <input
                             type="text"
@@ -556,16 +575,17 @@ export default function ProjectView({ projectId }) {
                         }} />
                     </div>
 
-                    {/* Filter - only show if there are rows */}
-                    {/* Filter - only show if there are rows AND no selection */}
-                    {hasRows && !hasSelection && (
+                    {/* Filter - Available when rows exist and NO selection */}
+                    {hasRows && !hasSelection && !allApproved && (
                         <StatusFilterDropdown
                             selectedStatuses={statusFilter}
                             onStatusChange={setStatusFilter}
                         />
                     )}
 
-                    {/* Import - always shown unless selection active */}
+                    {/* Import - Available when NO selection and NOT fully approved (unless we allow adding to approved?) Requirements say 'Import' on Approved too. */}
+                    {/* Requirements: Approved -> Search, Filter, Import, Export. So Import is always available except Selection? */}
+                    {/* Matrix says: Empty(Import), Pending(Import), Translated(Import), Approved(Import). Selection(No Import). */}
                     {!hasSelection && (
                         <PillButton
                             variant="outline"
@@ -576,7 +596,7 @@ export default function ProjectView({ projectId }) {
                         </PillButton>
                     )}
 
-                    {/* Delete - only show when selection active */}
+                    {/* Delete - Only when Selection is active */}
                     {hasSelection && (
                         <PillButton
                             variant="outline"
@@ -586,44 +606,62 @@ export default function ProjectView({ projectId }) {
                         </PillButton>
                     )}
 
-                    {/* Export - only show when all rows are approved */}
-                    {allApproved && (
-                        <PillButton
-                            variant="outline"
-                            onClick={handleExport}
-                        >
-                            <Download style={{ width: '16px', height: '16px' }} /> Export
-                        </PillButton>
-                    )}
-
-                    {/* Translate Again - show when selecting already-translated rows */}
-                    {hasSelection && allTranslated && !allApproved && (
-                        <PillButton
-                            variant="outline"
-                            onClick={handleTranslateAll}
-                            disabled={isTranslating}
-                        >
-                            <span style={{ fontSize: '14px' }}>✦</span> Translate Again
-                        </PillButton>
-                    )}
-
-                    {/* Primary Action Button - conditional based on state */}
-                    {!allApproved && hasRows && (
+                    {/* Translate Functions */}
+                    {/* Case 2: Pending (No Selection, Not all translated) -> Translate Empty */}
+                    {hasRows && !hasSelection && !allTranslated && (
                         <PrimaryButton
-                            style={{ height: '32px', fontSize: '12px', padding: '0 16px' }}
-                            onClick={allTranslated ? handleSendForReview : handleTranslateAll}
+                            style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium }}
+                            onClick={handleTranslateAll}
                             disabled={isTranslating}
                         >
                             {isTranslating ? (
                                 <><Loader2 style={{ width: '14px', height: '14px', marginRight: '4px', animation: 'spin 1s linear infinite' }} /> Translating...</>
-                            ) : allTranslated ? (
-                                <><Send style={{ width: '14px', height: '14px' }} /> Send for Review</>
-                            ) : hasSelection ? (
-                                <><span style={{ fontSize: '14px' }}>✦</span> Translate {selectedCount} selected</>
                             ) : (
-                                <><span style={{ fontSize: '14px' }}>✦</span> Translate empty rows</>
+                                <><span style={{ fontSize: '14px' }}>✦</span> Translate</>
                             )}
                         </PrimaryButton>
+                    )}
+
+                    {/* Case 3: Translated (No Selection, All translated, Not all approved) -> Export + Send for Review */}
+                    {hasRows && !hasSelection && allTranslated && !allApproved && (
+                        <>
+                            <PillButton
+                                variant="outline" // Greyish export
+                                style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginRight: '8px' }}
+                                onClick={handleExport}
+                            >
+                                <Download style={{ width: '14px', height: '14px' }} /> Export
+                            </PillButton>
+                            <PrimaryButton
+                                style={{ height: '32px', fontSize: '12px', padding: '0 16px' }} // Standard Pink
+                                onClick={handleSendForReview}
+                                disabled={isTranslating}
+                            >
+                                <Send style={{ width: '14px', height: '14px' }} /> Send for Review
+                            </PrimaryButton>
+                        </>
+                    )}
+
+                    {/* Case 4 & 5: Selection (Pending or Review) -> Translate Only (Blue) */}
+                    {hasSelection && !allApproved && (
+                        <PrimaryButton
+                            style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium }}
+                            onClick={handleTranslateAll}
+                            disabled={isTranslating}
+                        >
+                            <span style={{ fontSize: '14px' }}>✦</span> Translate {selectedCount}
+                        </PrimaryButton>
+                    )}
+
+                    {/* Case 6: Approved (All Approved) -> Export */}
+                    {allApproved && (
+                        <PillButton
+                            variant="outline"
+                            style={{ height: '32px', fontSize: '12px', padding: '0 16px' }}
+                            onClick={handleExport}
+                        >
+                            <Download style={{ width: '16px', height: '16px' }} /> Export
+                        </PillButton>
                     )}
                 </div>
             </div>
@@ -779,6 +817,28 @@ export default function ProjectView({ projectId }) {
                     </tr>
                 )}
             </DataTable>
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmDialog
+                open={!!deleteConfirm}
+                onClose={() => setDeleteConfirm(null)}
+                onConfirm={performBulkDelete}
+                title="Delete Rows?"
+                message={`Are you sure you want to delete ${deleteConfirm?.count || 0} selected rows? This action cannot be undone.`}
+                confirmLabel="Delete"
+                variant="destructive"
+            />
+
+            {/* Duplicate Confirmation Dialog */}
+            <ConfirmDialog
+                open={!!duplicateConfirm}
+                onClose={() => setDuplicateConfirm(null)}
+                onConfirm={() => addRowToProject(duplicateConfirm?.row)}
+                title="Duplicate Detected"
+                message={`A row with similar content already exists: "${duplicateConfirm?.duplicate?.en?.substring(0, 50)}..."\n\nDo you want to add this row anyway?`}
+                confirmLabel="Add Anyway"
+                variant="default"
+            />
         </div>
     )
 }

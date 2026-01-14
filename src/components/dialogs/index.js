@@ -2,3 +2,4 @@
 export { default as ImportExcelDialog } from './ImportExcelDialog'
 export { default as PromptDetailDialog } from './PromptDetailDialog'
 export { default as GlossaryTermDialog } from './GlossaryTermDialog'
+export { ConfirmDialog } from './ConfirmDialog'

@@ -107,15 +107,17 @@ function processTemplate(template, targetLanguages) {
 
 /**
  * Translate a batch of rows using Gemini AI
- * @param {Array} rows - Array of row objects with {id, en/source, context}
+ * @param {Array} rows - Array of row objects with {id, en/my/zh/source, context}
  * @param {Object} template - Prompt template with {name, prompt}
  * @param {Object} options - Translation options
+ * @param {string} options.sourceLanguage - Source language code ('en', 'my', 'zh')
  * @param {Array} options.targetLanguages - Target language codes ['my', 'zh']
  * @param {Array} options.glossaryTerms - Array of glossary terms
  * @returns {Promise<Array>} - Array of translated results
  */
 export async function translateBatch(rows, template, options = {}) {
     const {
+        sourceLanguage = 'en',
         targetLanguages = ['my', 'zh'],
         glossaryTerms = []
     } = options;
@@ -125,6 +127,7 @@ export async function translateBatch(rows, template, options = {}) {
     console.log('🚀 [Gemini API] Starting translation batch:', {
         rowCount: rows.length,
         template: template?.name || 'Default',
+        sourceLanguage,
         targetLanguages,
         glossaryTermCount: glossaryTerms.length
     });
@@ -134,14 +137,18 @@ export async function translateBatch(rows, template, options = {}) {
         throw new Error('API_NOT_CONFIGURED');
     }
 
-    // Build the translation prompt
-    const sourceTexts = rows.map(row => ({
-        id: row.id,
-        text: row.en || row.english || row.source,
-        context: row.context || row.description || ''
-    }));
+    // Build the translation prompt - extract source text based on source language
+    const sourceTexts = rows.map(row => {
+        // Try to get text from source language field, fallback to common fields
+        const text = row[sourceLanguage] || row.en || row.english || row.source || '';
+        return {
+            id: row.id,
+            text: text,
+            context: row.context || row.description || ''
+        };
+    });
 
-    const prompt = buildTranslationPrompt(sourceTexts, template, targetLanguages, glossaryTerms);
+    const prompt = buildTranslationPrompt(sourceTexts, template, targetLanguages, glossaryTerms, sourceLanguage);
 
     console.log('📝 [Gemini API] Prompt built, sending request...');
 
@@ -186,8 +193,9 @@ export async function translateBatch(rows, template, options = {}) {
 /**
  * Build the translation prompt with template, glossary, and context
  */
-function buildTranslationPrompt(sourceTexts, template, targetLanguages, glossaryTerms = []) {
+function buildTranslationPrompt(sourceTexts, template, targetLanguages, glossaryTerms = [], sourceLanguage = 'en') {
     const targetLangStr = targetLanguages.map(l => LANGUAGE_NAMES[l] || l).join(' and ');
+    const sourceLangStr = LANGUAGE_NAMES[sourceLanguage] || 'English';
 
     // Process template with variable substitution
     const styleInstruction = processTemplate(template, targetLanguages);
@@ -195,7 +203,7 @@ function buildTranslationPrompt(sourceTexts, template, targetLanguages, glossary
     // Build glossary section (with context-aware filtering)
     const glossarySection = buildGlossaryPrompt(glossaryTerms, targetLanguages, sourceTexts);
 
-    const prompt = `You are a professional translator for a Malaysian telecommunications company. Translate the following texts from English to ${targetLangStr}.
+    const prompt = `You are a professional translator for a Malaysian telecommunications company. Translate the following texts from ${sourceLangStr} to ${targetLangStr}.
 
 ## Style Guidelines
 ${styleInstruction}
@@ -210,7 +218,7 @@ ${glossarySection}
 ## Input
 I will provide you with a JSON array of objects. Each object has:
 - "id": A unique identifier (return this unchanged)
-- "text": The English text to translate
+- "text": The ${sourceLangStr} text to translate
 - "context": Optional context about where this text is used
 
 \`\`\`json
@@ -224,8 +232,8 @@ Use these exact keys: ${targetLanguages.map(l => `"${l}"`).join(', ')}
 Example output format:
 \`\`\`json
 [
-  {"id": 1, "my": "Malay translation here", "zh": "中文翻译在这里"},
-  {"id": 2, "my": "...", "zh": "..."}
+  {"id": 1, ${targetLanguages.map(l => `"${l}": "${LANGUAGE_NAMES[l] || l} translation"`).join(', ')}},
+  {"id": 2, ${targetLanguages.map(l => `"${l}": "..."`).join(', ')}}
 ]
 \`\`\`
 
@@ -256,10 +264,11 @@ function parseTranslationResponse(responseText, originalRows) {
         // Merge with original row data
         return originalRows.map(row => {
             const translation = parsed.find(t => String(t.id) === String(row.id));
+            const { id, ...translatedFields } = translation || {};
+
             return {
                 id: row.id,
-                my: translation?.my || '',
-                zh: translation?.zh || '',
+                ...translatedFields, // Dynamically spread all returned languages (en, my, zh)
                 status: 'review',
                 translatedAt: new Date().toISOString(),
             };
