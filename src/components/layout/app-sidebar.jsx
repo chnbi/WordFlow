@@ -13,6 +13,10 @@ import {
   ChevronDown,
   ChevronRight,
   Edit3,
+  Trash2,
+  Plus,
+  Pencil,
+  Sparkles,
 } from "lucide-react"
 
 import { NavMain } from "./nav-main"
@@ -149,53 +153,267 @@ const navSettings = [
 ]
 
 // Component for projects with multiple pages (like "5g advanced" in Figma)
-function ProjectWithPages({ project, pages, isActive, currentHash }) {
-  const [isOpen, setIsOpen] = React.useState(isActive)
+function ProjectWithPages({
+  project,
+  pages,
+  isActive,
+  currentHash,
+  onDeleteProject,
+  onAddPage,
+  onDeletePage,
+  onRenamePage,
+  isExpanded,
+  onProjectClick,
+}) {
+  const [hoveredProject, setHoveredProject] = React.useState(false)
+  const [hoveredPageId, setHoveredPageId] = React.useState(null)
+  const [editingPageId, setEditingPageId] = React.useState(null)
+  const [editingName, setEditingName] = React.useState("")
+  const [deleteConfirm, setDeleteConfirm] = React.useState(null) // { type: 'project' | 'page', id: string }
+
+  const handleAddPage = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    onAddPage(project.id)
+  }
+
+  const handleDeleteProject = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setDeleteConfirm({ type: 'project', id: project.id })
+  }
+
+  const handleDeletePage = (e, pageId) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setDeleteConfirm({ type: 'page', id: pageId })
+  }
+
+  const handleStartRename = (e, page) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setEditingPageId(page.id)
+    setEditingName(page.name)
+  }
+
+  const handleSaveRename = () => {
+    if (editingName.trim() && editingPageId) {
+      onRenamePage(project.id, editingPageId, editingName.trim())
+    }
+    setEditingPageId(null)
+    setEditingName("")
+  }
+
+  const handleCancelRename = () => {
+    setEditingPageId(null)
+    setEditingName("")
+  }
+
+  const confirmDelete = () => {
+    if (deleteConfirm?.type === 'project') {
+      onDeleteProject(project.id)
+    } else if (deleteConfirm?.type === 'page') {
+      onDeletePage(project.id, deleteConfirm.id)
+    }
+    setDeleteConfirm(null)
+  }
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <SidebarMenuItem>
-        <CollapsibleTrigger asChild>
-          <SidebarMenuButton
-            tooltip={project.name}
-            isActive={isActive}
-          >
-            <Folder className="h-4 w-4" />
-            <span>{project.name}</span>
-            <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-          </SidebarMenuButton>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <SidebarMenuSub>
-            {pages.map((page) => {
-              const isActivePage = currentHash.includes(`page=${page.id}`) ||
-                (isActive && currentHash === `#project/${project.id}` && pages[0]?.id === page.id)
-              return (
-                <SidebarMenuSubItem key={page.id}>
-                  <SidebarMenuSubButton
-                    asChild
-                    isActive={isActivePage}
+    <>
+      <Collapsible open={isExpanded} onOpenChange={() => onProjectClick(project.id)}>
+        <SidebarMenuItem>
+          <CollapsibleTrigger asChild>
+            <SidebarMenuButton
+              tooltip={project.name}
+              isActive={false}
+              onMouseEnter={() => setHoveredProject(true)}
+              onMouseLeave={() => setHoveredProject(false)}
+              className="group relative"
+            >
+              <Folder className="h-4 w-4 flex-shrink-0" />
+              <span style={{
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: hoveredProject ? '100px' : '140px'
+              }}>
+                {project.name}
+              </span>
+
+              {/* Hover icons for project */}
+              {hoveredProject && (
+                <div className="flex items-center gap-1 ml-auto" style={{ flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={handleDeleteProject}
+                    className="p-0.5 hover:bg-rose-100 rounded transition-colors"
+                    title="Delete project"
                   >
-                    <a href={`#project/${project.id}?page=${page.id}`}>
-                      <span>{page.name}</span>
-                    </a>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              )
-            })}
-          </SidebarMenuSub>
-        </CollapsibleContent>
-      </SidebarMenuItem>
-    </Collapsible>
+                    <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-rose-500" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddPage}
+                    className="p-0.5 hover:bg-pink-100 rounded transition-colors"
+                    title="Add page"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-gray-400 hover:text-pink-500" />
+                  </button>
+                </div>
+              )}
+
+              {!hoveredProject && (
+                <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              )}
+            </SidebarMenuButton>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <SidebarMenuSub>
+              {pages.map((page) => {
+                const isActivePage = currentHash.includes(`page=${page.id}`) ||
+                  (isActive && currentHash === `#project/${project.id}` && pages[0]?.id === page.id)
+                const isHovered = hoveredPageId === page.id
+                const isEditing = editingPageId === page.id
+
+                return (
+                  <SidebarMenuSubItem
+                    key={page.id}
+                    onMouseEnter={() => setHoveredPageId(page.id)}
+                    onMouseLeave={() => setHoveredPageId(null)}
+                  >
+                    {isEditing ? (
+                      <div className="flex items-center gap-1 px-2 py-1">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveRename()
+                            if (e.key === 'Escape') handleCancelRename()
+                          }}
+                          onBlur={handleSaveRename}
+                          autoFocus
+                          className="flex-1 text-sm px-1.5 py-0.5 border rounded outline-none focus:border-pink-400"
+                          style={{ minWidth: 0 }}
+                        />
+                      </div>
+                    ) : (
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={isActivePage}
+                        style={{
+                          backgroundColor: isActivePage ? 'hsl(329, 100%, 96%)' : undefined,
+                          borderRadius: isActivePage ? '8px' : undefined,
+                        }}
+                      >
+                        <a
+                          href={`#project/${project.id}?page=${page.id}`}
+                          className="flex items-center w-full"
+                        >
+                          <span style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: isHovered ? '90px' : '130px',
+                            color: isActivePage ? '#FF0084' : undefined,
+                            fontWeight: isActivePage ? 500 : undefined,
+                          }}>
+                            {page.name}
+                          </span>
+
+                          {/* Hover icons for page */}
+                          {isHovered && (
+                            <div className="flex items-center gap-0.5 ml-auto" style={{ flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeletePage(e, page.id)}
+                                className="p-0.5 hover:bg-rose-100 rounded transition-colors"
+                                title="Delete page"
+                              >
+                                <Trash2 className="h-3 w-3 text-gray-400 hover:text-rose-500" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => handleStartRename(e, page)}
+                                className="p-0.5 hover:bg-blue-100 rounded transition-colors"
+                                title="Rename page"
+                              >
+                                <Pencil className="h-3 w-3 text-gray-400 hover:text-blue-500" />
+                              </button>
+                            </div>
+                          )}
+                        </a>
+                      </SidebarMenuSubButton>
+                    )}
+                  </SidebarMenuSubItem>
+                )
+              })}
+            </SidebarMenuSub>
+          </CollapsibleContent>
+        </SidebarMenuItem>
+      </Collapsible>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setDeleteConfirm(null)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">
+              Delete {deleteConfirm.type === 'project' ? 'Project' : 'Page'}?
+            </h3>
+            <p className="text-gray-600 text-sm mb-4">
+              {deleteConfirm.type === 'project'
+                ? `This will permanently delete "${project.name}" and all its pages.`
+                : `This will permanently delete this page and all its content.`
+              }
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                style={{ backgroundColor: '#FF0084' }}
+                className="px-4 py-2 text-sm text-white hover:opacity-90 rounded"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
 export function AppSidebar({ ...props }) {
-  const { projects, getProjectPages, getPageRows, getProjectRows } = useProjects()
+  const {
+    projects,
+    getProjectPages,
+    getPageRows,
+    getProjectRows,
+    deleteProject,
+    addProjectPage,
+    deleteProjectPage,
+    renameProjectPage,
+  } = useProjects()
   const { terms: glossaryTerms } = useGlossary()
   const { prompts } = usePrompts()
   const [settingsOpen, setSettingsOpen] = React.useState(true)
   const [currentHash, setCurrentHash] = React.useState(window.location.hash)
+  const [expandedProjectId, setExpandedProjectId] = React.useState(null)
 
   // Listen for hash changes
   React.useEffect(() => {
@@ -203,6 +421,69 @@ export function AppSidebar({ ...props }) {
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
+
+  // Auto-expand the active project
+  React.useEffect(() => {
+    const match = currentHash.match(/project\/([^?]+)/)
+    if (match) {
+      setExpandedProjectId(match[1])
+    }
+  }, [currentHash])
+
+  // Handler: Project click - expand and navigate to first page
+  const handleProjectClick = (projectId) => {
+    // Always expand
+    setExpandedProjectId(projectId)
+
+    // Navigate to first page if available
+    const pages = getProjectPages(projectId)
+    if (pages && pages.length > 0) {
+      // Navigate to first page
+      window.location.hash = `#project/${projectId}?page=${pages[0].id}`
+    }
+  }
+
+  // Handler: Add new page to project
+  const handleAddPage = async (projectId) => {
+    const pages = getProjectPages(projectId) || []
+    const newPageName = `Page ${pages.length + 1}`
+    await addProjectPage(projectId, { name: newPageName })
+  }
+
+  // Handler: Delete project
+  const handleDeleteProject = async (projectId) => {
+    await deleteProject(projectId)
+    // Navigate away if we're on this project
+    if (currentHash.includes(`project/${projectId}`)) {
+      window.location.hash = '#projects'
+    }
+  }
+
+  // Handler: Delete page
+  const handleDeletePage = async (projectId, pageId) => {
+    const pages = getProjectPages(projectId) || []
+    // If deleting last page, delete the entire project
+    if (pages.length <= 1) {
+      await deleteProject(projectId)
+      if (currentHash.includes(`project/${projectId}`)) {
+        window.location.hash = '#projects'
+      }
+    } else {
+      await deleteProjectPage(projectId, pageId)
+      // Navigate to first page if we're on the deleted page
+      if (currentHash.includes(`page=${pageId}`)) {
+        const remainingPages = pages.filter(p => p.id !== pageId)
+        if (remainingPages.length > 0) {
+          window.location.hash = `#project/${projectId}?page=${remainingPages[0].id}`
+        }
+      }
+    }
+  }
+
+  // Handler: Rename page
+  const handleRenamePage = async (projectId, pageId, newName) => {
+    await renameProjectPage(projectId, pageId, newName)
+  }
 
   // Compute badge counts
   const pendingApprovals = React.useMemo(() => {
@@ -234,6 +515,7 @@ export function AppSidebar({ ...props }) {
     { title: "Glossary", url: "#glossary", icon: BookOpen, badge: glossaryPendingCount },
     { title: "Approvals", url: "#approvals", icon: Edit3, badge: pendingApprovals },
     { title: "Translate", url: "#image-translate", icon: Languages },
+    { title: "Quick Check", url: "#quick-check", icon: Sparkles },
     { title: "Prompt Library", url: "#prompt", icon: Library },
   ]
 
@@ -259,37 +541,24 @@ export function AppSidebar({ ...props }) {
           <SidebarGroupLabel className="text-sidebar-foreground/50 font-medium tracking-wide uppercase text-[10px] mt-2 mb-1 px-2">Recent projects</SidebarGroupLabel>
           <SidebarMenu>
             {navProjects.map((project) => {
-              const pages = getProjectPages(project.id)
-              const hasPages = pages && pages.length >= 1
+              const pages = getProjectPages(project.id) || []
               const isActiveProject = currentHash.includes(`project/${project.id}`)
 
-              // If project has multiple pages, show as collapsible
-              if (hasPages) {
-                return (
-                  <ProjectWithPages
-                    key={project.id}
-                    project={project}
-                    pages={pages}
-                    isActive={isActiveProject}
-                    currentHash={currentHash}
-                  />
-                )
-              }
-
-              // Single page project - simple link
+              // Always show as collapsible dropdown (even with 1 page)
               return (
-                <SidebarMenuItem key={project.id}>
-                  <SidebarMenuButton
-                    asChild
-                    tooltip={project.name}
-                    isActive={isActiveProject}
-                  >
-                    <a href={`#project/${project.id}`}>
-                      <Folder className="h-4 w-4" />
-                      <span>{project.name}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <ProjectWithPages
+                  key={project.id}
+                  project={project}
+                  pages={pages}
+                  isActive={isActiveProject}
+                  currentHash={currentHash}
+                  onDeleteProject={handleDeleteProject}
+                  onAddPage={handleAddPage}
+                  onDeletePage={handleDeletePage}
+                  onRenamePage={handleRenamePage}
+                  isExpanded={expandedProjectId === project.id}
+                  onProjectClick={handleProjectClick}
+                />
               )
             })}
           </SidebarMenu>

@@ -116,6 +116,8 @@ export function ProjectProvider({ children }) {
         selectPage: data.selectPage,
         addPageRows: data.addPageRows,
         addProjectPage: data.addProjectPage,
+        deleteProjectPage: data.deleteProjectPage,
+        renameProjectPage: data.renameProjectPage,
 
         // Selection
         getSelectedRowIds: selection.getSelectedRowIds,

@@ -212,11 +212,13 @@ export default function ImportExcelDialog({ open, onOpenChange, onImport }) {
                                     <SelectValue placeholder="Select a prompt template..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {templates.map(t => (
-                                        <SelectItem key={t.id} value={String(t.id)}>
-                                            {t.name}
-                                        </SelectItem>
-                                    ))}
+                                    {templates
+                                        .filter(t => t.status !== 'draft')
+                                        .map(t => (
+                                            <SelectItem key={t.id} value={String(t.id)}>
+                                                {t.name}
+                                            </SelectItem>
+                                        ))}
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-muted-foreground">

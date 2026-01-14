@@ -35,12 +35,32 @@ export function useProjectData() {
                             const rows = await firestoreService.getProjectRows(project.id)
                             allRows[project.id] = rows || []
 
-                            const pages = await firestoreService.getProjectPages(project.id)
-                            const pageRows = {}
-                            for (const page of pages) {
-                                const pRows = await firestoreService.getPageRows(project.id, page.id)
-                                pageRows[page.id] = pRows || []
+                            let pages = await firestoreService.getProjectPages(project.id)
+                            let pageRows = {}
+
+                            // Auto-migrate legacy projects: if has rows but no pages, create Page 1
+                            if (pages.length === 0 && rows && rows.length > 0) {
+                                console.log(`🔄 [Migration] Project ${project.id} has ${rows.length} legacy rows, migrating to Page 1...`)
+                                try {
+                                    const page = await firestoreService.addProjectPage(project.id, { name: 'Page 1' })
+                                    // Move rows to the new page
+                                    for (const row of rows) {
+                                        await firestoreService.addPageRows(project.id, page.id, [row])
+                                    }
+                                    pages = [page]
+                                    pageRows[page.id] = rows
+                                    console.log(`✅ [Migration] Successfully migrated ${rows.length} rows to Page 1`)
+                                } catch (migrationErr) {
+                                    console.error(`❌ [Migration] Failed to migrate project ${project.id}:`, migrationErr)
+                                }
+                            } else {
+                                // Load page rows normally
+                                for (const page of pages) {
+                                    const pRows = await firestoreService.getPageRows(project.id, page.id)
+                                    pageRows[page.id] = pRows || []
+                                }
                             }
+
                             allPagesData[project.id] = { pages, pageRows }
 
                             if (pages.length > 0) {
@@ -303,6 +323,11 @@ export function useProjectData() {
                 const newProject = { ...projectData, id: created.id }
                 setProjects(prev => [newProject, ...prev])
                 setProjectRows(prev => ({ ...prev, [created.id]: [] }))
+                // Initialize projectPages structure for new project
+                setProjectPages(prev => ({
+                    ...prev,
+                    [created.id]: { pages: [], pageRows: {} }
+                }))
                 return newProject
             } catch (error) {
                 console.error('Error creating project in Firestore:', error)
@@ -312,6 +337,11 @@ export function useProjectData() {
             const newProject = { ...projectData, id: String(Date.now()) }
             setProjects(prev => [newProject, ...prev])
             setProjectRows(prev => ({ ...prev, [newProject.id]: [] }))
+            // Initialize projectPages structure for new project
+            setProjectPages(prev => ({
+                ...prev,
+                [newProject.id]: { pages: [], pageRows: {} }
+            }))
             return newProject
         }
     }, [dataSource])
@@ -359,6 +389,47 @@ export function useProjectData() {
             }))
             setSelectedPageId(prev => ({ ...prev, [projectId]: page.id }))
             return page
+        }
+    }, [dataSource])
+
+    // Delete a project page
+    const deleteProjectPage = useCallback(async (projectId, pageId) => {
+        if (dataSource === 'firestore') {
+            await firestoreService.deleteProjectPage(projectId, pageId)
+            setProjectPages(prev => {
+                const projectData = prev[projectId] || { pages: [], pageRows: {} }
+                const newPages = projectData.pages.filter(p => p.id !== pageId)
+                const newPageRows = { ...projectData.pageRows }
+                delete newPageRows[pageId]
+                return {
+                    ...prev,
+                    [projectId]: { pages: newPages, pageRows: newPageRows }
+                }
+            })
+            // Clear selected page if it was deleted
+            setSelectedPageId(prev => {
+                if (prev[projectId] === pageId) {
+                    return { ...prev, [projectId]: null }
+                }
+                return prev
+            })
+        }
+    }, [dataSource])
+
+    // Rename a project page
+    const renameProjectPage = useCallback(async (projectId, pageId, newName) => {
+        if (dataSource === 'firestore') {
+            await firestoreService.renameProjectPage(projectId, pageId, newName)
+            setProjectPages(prev => {
+                const projectData = prev[projectId] || { pages: [], pageRows: {} }
+                const newPages = projectData.pages.map(p =>
+                    p.id === pageId ? { ...p, name: newName } : p
+                )
+                return {
+                    ...prev,
+                    [projectId]: { ...projectData, pages: newPages }
+                }
+            })
         }
     }, [dataSource])
 
@@ -432,6 +503,8 @@ export function useProjectData() {
         selectPage,
         addPageRows,
         addProjectPage,
+        deleteProjectPage,
+        renameProjectPage,
         selectedPageId,
     }
 }

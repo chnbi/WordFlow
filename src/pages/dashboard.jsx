@@ -113,7 +113,19 @@ export default function Dashboard() {
     const handleNewProject = async (projectData) => {
         const created = await addProject(projectData)
         if (created?.id) {
-            window.location.hash = `#project/${created.id}`
+            // Auto-create a default subpage
+            try {
+                const page = await addProjectPage(created.id, { name: 'Page 1' })
+                // Navigate to the subpage
+                if (page?.id) {
+                    window.location.hash = `#project/${created.id}?page=${page.id}`
+                } else {
+                    window.location.hash = `#project/${created.id}`
+                }
+            } catch (error) {
+                console.error('Error creating default page:', error)
+                window.location.hash = `#project/${created.id}`
+            }
         }
     }
 

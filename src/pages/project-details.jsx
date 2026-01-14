@@ -55,6 +55,7 @@ export default function ProjectView({ projectId }) {
     const [isTranslating, setIsTranslating] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState([]) // Multi-selectable status filter
+    const [waitTimeout, setWaitTimeout] = useState(false) // Timeout for waiting for project
 
     const fileInputRef = useRef(null)
 
@@ -77,6 +78,16 @@ export default function ProjectView({ projectId }) {
             }
         }
     }, [pageIdFromUrl, pages, id, currentPageId, selectPage])
+
+    // Timeout for waiting for newly created project (race condition)
+    useEffect(() => {
+        if (!project && id && id.length > 10) {
+            const timer = setTimeout(() => setWaitTimeout(true), 3000)
+            return () => clearTimeout(timer)
+        } else {
+            setWaitTimeout(false)
+        }
+    }, [project, id])
 
     const legacyRows = getProjectRows(id)
 
@@ -112,7 +123,11 @@ export default function ProjectView({ projectId }) {
     const allApproved = hasRows && rows.every(row => row.status === 'approved')
 
     // Show loading state while Firestore data is being fetched
-    if (isLoading) {
+    // Also show loading if project ID is present but project not found (newly created - race condition)
+    const projectIdValid = id && id.length > 10 // Firestore IDs are usually 20+ chars
+    const isWaitingForProject = !isLoading && !project && projectIdValid && !waitTimeout
+
+    if (isLoading || isWaitingForProject) {
         return (
             <div className="flex flex-col items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
@@ -211,6 +226,28 @@ export default function ProjectView({ projectId }) {
         setTimeout(() => newRowInputRef.current?.focus(), 50)
     }
 
+    // Check if a new row is a duplicate of existing rows
+    const findDuplicateRow = (newRow, existingRows) => {
+        return existingRows.find(existing => {
+            // Check English (case-insensitive)
+            if (newRow.en && existing.en &&
+                newRow.en.toLowerCase().trim() === existing.en.toLowerCase().trim()) {
+                return true
+            }
+            // Check Malay (case-insensitive)
+            if (newRow.my && existing.my &&
+                newRow.my.toLowerCase().trim() === existing.my.toLowerCase().trim()) {
+                return true
+            }
+            // Check Chinese (exact match)
+            if (newRow.zh && existing.zh &&
+                newRow.zh.trim() === existing.zh.trim()) {
+                return true
+            }
+            return false
+        })
+    }
+
     const handleSaveNewRow = async () => {
         if (!newRowData.en.trim()) {
             setIsAddingRow(false)
@@ -224,6 +261,15 @@ export default function ProjectView({ projectId }) {
             status: 'draft',  // New rows start as draft
             promptId: 'default',  // Default prompt assignment
         }
+
+        // Check for duplicates
+        const duplicate = findDuplicateRow(newRow, rows)
+        if (duplicate) {
+            if (!window.confirm(`Duplicate detected: "${duplicate.en}"\n\nAdd this row anyway?`)) {
+                return // User cancelled
+            }
+        }
+
         if (pages.length > 0 && currentPageId) {
             await addPageRows(id, currentPageId, [newRow])
         } else {
@@ -245,6 +291,23 @@ export default function ProjectView({ projectId }) {
             handleSaveNewRow()
         } else if (e.key === 'Escape') {
             handleCancelAddRow()
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        if (selectedCount === 0) return
+
+        if (!window.confirm(`Are you sure you want to delete ${selectedCount} selected rows?`)) {
+            return
+        }
+
+        try {
+            await deleteRows(id, selectedRowIds)
+            deselectAllRows(id)
+            toast.success(`Deleted ${selectedCount} rows`)
+        } catch (error) {
+            console.error('Delete failed:', error)
+            toast.error('Failed to delete rows')
         }
     }
 
@@ -494,21 +557,34 @@ export default function ProjectView({ projectId }) {
                     </div>
 
                     {/* Filter - only show if there are rows */}
-                    {hasRows && (
+                    {/* Filter - only show if there are rows AND no selection */}
+                    {hasRows && !hasSelection && (
                         <StatusFilterDropdown
                             selectedStatuses={statusFilter}
                             onStatusChange={setStatusFilter}
                         />
                     )}
 
-                    {/* Import - always shown */}
-                    <PillButton
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isImporting}
-                    >
-                        <Upload style={{ width: '16px', height: '16px' }} /> Import
-                    </PillButton>
+                    {/* Import - always shown unless selection active */}
+                    {!hasSelection && (
+                        <PillButton
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isImporting}
+                        >
+                            <Upload style={{ width: '16px', height: '16px' }} /> Import
+                        </PillButton>
+                    )}
+
+                    {/* Delete - only show when selection active */}
+                    {hasSelection && (
+                        <PillButton
+                            variant="outline"
+                            onClick={handleBulkDelete}
+                        >
+                            <Trash2 style={{ width: '16px', height: '16px' }} /> Delete {selectedCount}
+                        </PillButton>
+                    )}
 
                     {/* Export - only show when all rows are approved */}
                     {allApproved && (

@@ -7,7 +7,7 @@ import Settings from './pages/settings'
 import ProjectView from './pages/project-details'
 import ImageTranslation from './pages/image-translation'
 import Approvals from './pages/approvals'
-import Login from './pages/login'
+import QuickCheck from './pages/quick-check'
 import { createContext, useContext } from 'react'
 import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor, ACTIONS } from './lib/permissions'
 import { ProjectProvider, useProjects } from './context/ProjectContext'
@@ -117,13 +117,16 @@ function AppWithRouting({ authContextValue }) {
                 return { component: ImageTranslation, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Translate' }] }
             case 'approvals':
                 return { component: Approvals, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Approvals' }] }
+            case 'quick-check':
+                return { component: QuickCheck, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Quick Check' }] }
             case 'settings':
                 return { component: Settings, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings' }] }
             default:
                 if (path.startsWith('project/')) {
-                    const projectId = path.split('/')[1]
+                    // Split to remove query string (e.g., "xxx?page=yyy" -> "xxx")
+                    const projectId = path.split('/')[1].split('?')[0]
                     const project = getProject(projectId)
-                    const projectName = project?.name || `Project #${projectId}`
+                    const projectName = project?.name || `Project #${projectId.slice(0, 8)}...`
                     return {
                         component: ProjectView,
                         breadcrumbs: [

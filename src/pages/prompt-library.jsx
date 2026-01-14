@@ -1,6 +1,6 @@
 // Prompt Library - Card grid layout matching Figma design
 import { useState, useRef, useEffect } from "react"
-import { Search, Plus, Filter, ArrowUpDown, MoreHorizontal, Copy, Pencil, Trash2, X, CirclePlus } from "lucide-react"
+import { Search, Plus, Filter, MoreHorizontal, Copy, Pencil, Trash2, X, CirclePlus, Pin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PromptDetailDialog } from "@/components/dialogs"
 import { usePrompts } from "@/context/PromptContext"
@@ -48,9 +48,11 @@ export default function PromptLibrary() {
     }, [openMenu])
 
     // Filter by search, category, and status
-    const filteredTemplates = templates.filter(template => {
-        const matchesSearch = template.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            template.prompt?.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredTemplates = (templates || []).filter(template => {
+        if (!template) return false
+
+        const matchesSearch = (template.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (template.prompt || '').toLowerCase().includes(searchQuery.toLowerCase())
 
         // Category filter (using tags)
         const templateTags = template.tags || ['Default']
@@ -226,11 +228,7 @@ export default function PromptLibrary() {
                         statusOptions={PROMPT_STATUS_OPTIONS}
                     />
 
-                    {/* Sort */}
-                    <PillButton variant="outline">
-                        <ArrowUpDown style={{ width: '14px', height: '14px' }} />
-                        Sort
-                    </PillButton>
+
 
                     {/* New Template Button */}
                     {canDo(ACTIONS.CREATE_PROMPT) && (
@@ -242,12 +240,27 @@ export default function PromptLibrary() {
                 </div>
             </div>
 
-            {/* Card Grid - 4 columns */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '16px'
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                gap: '20px'
             }}>
+                {/* No prompts found message */}
+                {sortedTemplates.length === 0 && (
+                    <div style={{
+                        gridColumn: '1 / -1',
+                        textAlign: 'center',
+                        padding: '60px 20px',
+                        color: 'hsl(220, 9%, 46%)'
+                    }}>
+                        <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>
+                            No prompts found
+                        </p>
+                        <p style={{ fontSize: '14px' }}>
+                            Try adjusting your search or filter criteria.
+                        </p>
+                    </div>
+                )}
                 {/* Template Cards */}
                 {sortedTemplates.map(template => {
                     const status = getStatusConfig(template.status)
@@ -267,7 +280,7 @@ export default function PromptLibrary() {
                             style={{
                                 backgroundColor: 'white',
                                 borderRadius: '16px',
-                                border: isDefault ? '2px solid #FF0084' : '1px solid hsl(220, 13%, 91%)',
+                                border: isDefault ? '2px solid hsl(220, 13%, 70%)' : '1px solid hsl(220, 13%, 91%)',
                                 padding: '20px',
                                 position: 'relative',
                                 cursor: 'pointer',
@@ -296,14 +309,33 @@ export default function PromptLibrary() {
                                     {categoryLabel}
                                 </span>
 
-                                {/* Menu */}
+                                {/* Menu - show Pin for default, three-dot menu for others */}
                                 <div style={{ position: 'relative' }} data-menu>
-                                    <IconButton
-                                        onClick={() => setOpenMenu(openMenu === template.id ? null : template.id)}
-                                        style={{ color: 'hsl(220, 9%, 46%)' }}
-                                    >
-                                        <MoreHorizontal style={{ width: '16px', height: '16px' }} />
-                                    </IconButton>
+                                    {isDefault ? (
+                                        <div
+                                            style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: '#FF0084'
+                                            }}
+                                            title="Default Template"
+                                        >
+                                            <Pin style={{ width: '16px', height: '16px' }} />
+                                        </div>
+                                    ) : (
+                                        <IconButton
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setOpenMenu(openMenu === template.id ? null : template.id)
+                                            }}
+                                            style={{ color: 'hsl(220, 9%, 46%)' }}
+                                        >
+                                            <MoreHorizontal style={{ width: '16px', height: '16px' }} />
+                                        </IconButton>
+                                    )}
 
                                     {openMenu === template.id && (
                                         <div style={{

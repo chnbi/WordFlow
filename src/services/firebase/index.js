@@ -11,6 +11,7 @@ export {
     getProjectPages,
     addProjectPage,
     deleteProjectPage,
+    renameProjectPage,
     getPageRows,
     addPageRows,
     updatePageRow,

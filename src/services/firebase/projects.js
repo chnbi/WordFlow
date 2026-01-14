@@ -149,6 +149,18 @@ export async function deleteProjectPage(projectId, pageId) {
     }
 }
 
+export async function renameProjectPage(projectId, pageId, newName) {
+    try {
+        const docRef = doc(db, 'projects', projectId, 'pages', pageId)
+        await updateDoc(docRef, { name: newName })
+        console.log('✅ [Firestore] Page renamed:', pageId, 'to', newName)
+        await updateProject(projectId, {}) // Update lastUpdated
+    } catch (error) {
+        console.error('Error renaming page:', error)
+        throw error
+    }
+}
+
 // ==========================================
 // PAGE ROWS
 // ==========================================

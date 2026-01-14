@@ -203,11 +203,11 @@ export default function Glossary() {
     const hasTerms = filteredTerms.length > 0
     const hasSelection = selectedIds.length > 0
     const relevantTerms = hasSelection
-        ? terms.filter(term => selectedIds.includes(term.id))
-        : terms
-    const hasEmptyTranslations = relevantTerms.some(term => !term.malay?.trim() || !term.chinese?.trim())
-    const allTranslated = hasTerms && !relevantTerms.some(term => !term.malay?.trim() || !term.chinese?.trim())
-    const allApproved = hasTerms && terms.every(term => term.status === 'approved')
+        ? (terms || []).filter(term => term && selectedIds.includes(term.id))
+        : (terms || [])
+    const hasEmptyTranslations = relevantTerms.some(term => term && (!term.malay?.trim() || !term.chinese?.trim()))
+    const allTranslated = hasTerms && !relevantTerms.some(term => term && (!term.malay?.trim() || !term.chinese?.trim()))
+    const allApproved = hasTerms && (terms || []).every(term => !term || term.status === 'approved')
 
     const handleSort = (field) => {
         if (sortField === field) {
@@ -247,15 +247,27 @@ export default function Glossary() {
             toast.error('English term is required')
             return
         }
+
+        const termToAdd = {
+            english: newRow.english.trim(),
+            malay: newRow.malay.trim(),
+            chinese: newRow.chinese.trim(),
+            category: newRow.category || 'General',
+            status: 'draft',
+            remark: ''
+        }
+
+        // Check for duplicates using existing findDuplicates function
+        const { duplicates } = findDuplicates([termToAdd])
+        if (duplicates.length > 0) {
+            const matchedTerm = duplicates[0].existing
+            if (!window.confirm(`Duplicate detected: "${matchedTerm.english}"\n\nAdd this term anyway?`)) {
+                return // User cancelled
+            }
+        }
+
         try {
-            await addTerm({
-                english: newRow.english.trim(),
-                malay: newRow.malay.trim(),
-                chinese: newRow.chinese.trim(),
-                category: newRow.category || 'General',
-                status: 'draft',
-                remark: ''
-            })
+            await addTerm(termToAdd)
             toast.success('Term added successfully')
             setIsAddingRow(false)
             setNewRow({ english: '', malay: '', chinese: '', category: 'General' })
@@ -599,21 +611,31 @@ export default function Glossary() {
                             }} />
                         </div>
 
-                        {/* Filter - only show if there are terms */}
-                        {hasTerms && (
+                        {/* Filter - only show if there are terms AND no selection */}
+                        {hasTerms && !hasSelection && (
                             <StatusFilterDropdown
                                 selectedStatuses={statusFilter}
                                 onStatusChange={setStatusFilter}
                             />
                         )}
 
-                        {/* Import - always shown */}
-                        {canDo(ACTIONS.CREATE_GLOSSARY) && (
+                        {/* Import - always shown unless selection active */}
+                        {canDo(ACTIONS.CREATE_GLOSSARY) && !hasSelection && (
                             <PillButton
                                 variant="outline"
                                 onClick={() => setIsImportOpen(true)}
                             >
                                 <Upload style={{ width: '16px', height: '16px' }} /> Import
+                            </PillButton>
+                        )}
+
+                        {/* Delete - only show when selection active */}
+                        {hasSelection && (
+                            <PillButton
+                                variant="outline"
+                                onClick={handleBulkDelete}
+                            >
+                                <Trash2 style={{ width: '16px', height: '16px' }} /> Delete {selectedIds.length}
                             </PillButton>
                         )}
 
