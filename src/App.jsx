@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from 'react'
+import { useState, useEffect, useCallback, Component } from 'react'
 import Layout from './components/layout'
 import Dashboard from './pages/dashboard'
 import Glossary from './pages/glossary-library'
@@ -15,18 +15,19 @@ import { GlossaryProvider } from './context/GlossaryContext'
 import { PromptProvider } from './context/PromptContext'
 import { Toaster } from "sonner"
 import { AlertCircle } from "lucide-react"
+import { getUserByEmail } from './api/pocketbase'
 
 // ===========================================
 // DEV MODE: Set to true to bypass auth
 // ===========================================
 const DEV_BYPASS_AUTH = true
 
-// Mock user for development
-const mockUser = {
-    uid: 'dev-user-123',
+// Default dev user (can be overridden by PocketBase lookup)
+const DEFAULT_DEV_USER = {
+    id: 'dev-user-123',
     email: 'dev@example.com',
-    displayName: 'Dev User',
-    photoURL: null
+    name: 'Dev User',
+    avatar: null
 }
 
 // Error Boundary
@@ -173,20 +174,55 @@ function AppWithRouting() {
 }
 
 function App() {
-    // Role state for dev testing
+    // User and role state for dev mode
+    const [devUser, setDevUser] = useState(DEFAULT_DEV_USER)
     const [currentRole, setCurrentRole] = useState(ROLES.MANAGER)
+    const [loading, setLoading] = useState(true)
+
+    // Load user role from PocketBase on mount (dev mode)
+    const loadDevUserRole = useCallback(async () => {
+        if (!DEV_BYPASS_AUTH) return
+
+        try {
+            const userData = await getUserByEmail(DEFAULT_DEV_USER.email)
+            if (userData) {
+                setDevUser({
+                    id: userData.id,
+                    email: userData.email,
+                    name: userData.name || DEFAULT_DEV_USER.name,
+                    avatar: userData.avatar
+                })
+                setCurrentRole(userData.role || ROLES.MANAGER)
+                console.log('✅ [PocketBase] Dev user role loaded:', userData.role)
+            } else {
+                console.log('📝 [PocketBase] No user found, using default dev role')
+            }
+        } catch (error) {
+            console.log('📝 [PocketBase] Could not load dev user, using defaults:', error.message)
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        loadDevUserRole()
+    }, [loadDevUserRole])
 
     // Create context value with canDo helper
     const authContextValue = {
-        user: mockUser,
+        user: devUser,
         role: currentRole,
         setRole: setCurrentRole,
-        loading: false,
-        signIn: () => console.log('Sign in clicked'),
-        signOut: () => console.log('Sign out clicked'),
+        loading,
+        signIn: () => console.log('Sign in clicked (dev mode)'),
+        signOut: () => console.log('Sign out clicked (dev mode)'),
         canDo: (action) => checkPermission(currentRole, action),
         isManager: currentRole === ROLES.MANAGER,
         isEditor: currentRole === ROLES.EDITOR,
+        // Expose permission utilities
+        getRoleLabel,
+        getRoleColor,
+        ROLES,
     }
 
     if (DEV_BYPASS_AUTH) {
@@ -206,7 +242,7 @@ function App() {
         )
     }
 
-    // Production mode - use real auth
+    // Production mode - use real PocketBase auth
     const { AuthProvider, useAuth: realUseAuth } = require('./hooks/useAuth.jsx')
 
     function AppContent() {
@@ -220,13 +256,24 @@ function App() {
             )
         }
 
-        if (!user) return <Login />
+        if (!user) {
+            // Redirect to login or show login UI
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950">
+                    <div className="text-center">
+                        <h1 className="text-xl font-bold mb-4">Please Sign In</h1>
+                        <button
+                            onClick={() => realUseAuth().signInWithOAuth('google')}
+                            className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600"
+                        >
+                            Sign in with Google
+                        </button>
+                    </div>
+                </div>
+            )
+        }
 
-        return (
-            <Layout breadcrumbs={[{ label: 'Home' }]}>
-                <Home />
-            </Layout>
-        )
+        return <AppWithRouting />
     }
 
     return (

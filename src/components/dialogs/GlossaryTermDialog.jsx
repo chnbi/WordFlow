@@ -27,10 +27,11 @@ const statuses = [
 ]
 
 export default function GlossaryTermDialog({ open, onOpenChange, initialData, onSave }) {
+    // Using PocketBase field names: en, my, cn
     const [formData, setFormData] = useState({
-        english: '',
-        malay: '',
-        chinese: '',
+        en: '',
+        my: '',
+        cn: '',
         category: 'General',
         status: 'draft',
         remark: '',
@@ -39,12 +40,20 @@ export default function GlossaryTermDialog({ open, onOpenChange, initialData, on
     useEffect(() => {
         if (open) {
             if (initialData) {
-                setFormData(initialData)
+                // Map initialData to form fields (support both old and new field names)
+                setFormData({
+                    en: initialData.en || initialData.english || '',
+                    my: initialData.my || initialData.malay || '',
+                    cn: initialData.cn || initialData.chinese || '',
+                    category: initialData.category || 'General',
+                    status: initialData.status || 'draft',
+                    remark: initialData.remark || '',
+                })
             } else {
                 setFormData({
-                    english: '',
-                    malay: '',
-                    chinese: '',
+                    en: '',
+                    my: '',
+                    cn: '',
                     category: 'General',
                     status: 'draft',
                     remark: '',
@@ -77,8 +86,8 @@ export default function GlossaryTermDialog({ open, onOpenChange, initialData, on
                             <Label>English</Label>
                             <Input
                                 placeholder="e.g. Dashboard"
-                                value={formData.english}
-                                onChange={e => setFormData(prev => ({ ...prev, english: e.target.value }))}
+                                value={formData.en}
+                                onChange={e => setFormData(prev => ({ ...prev, en: e.target.value }))}
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -86,16 +95,16 @@ export default function GlossaryTermDialog({ open, onOpenChange, initialData, on
                                 <Label>Bahasa Malaysia</Label>
                                 <Input
                                     placeholder="e.g. Papan Pemuka"
-                                    value={formData.malay}
-                                    onChange={e => setFormData(prev => ({ ...prev, malay: e.target.value }))}
+                                    value={formData.my}
+                                    onChange={e => setFormData(prev => ({ ...prev, my: e.target.value }))}
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label>中文</Label>
                                 <Input
                                     placeholder="e.g. 仪表板"
-                                    value={formData.chinese}
-                                    onChange={e => setFormData(prev => ({ ...prev, chinese: e.target.value }))}
+                                    value={formData.cn}
+                                    onChange={e => setFormData(prev => ({ ...prev, cn: e.target.value }))}
                                 />
                             </div>
                         </div>

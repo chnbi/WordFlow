@@ -27,7 +27,7 @@ import { exportGlossaryToExcel } from "@/lib/export"
 import * as XLSX from "xlsx"
 import ImportGlossaryDialog from "@/components/dialogs/ImportGlossaryDialog"
 import { toast } from "sonner"
-import { translateBatch } from "@/services/gemini/text"
+import { translateBatch } from "@/api/gemini/text"
 import { PromptCategoryDropdown } from "@/components/ui/PromptCategoryDropdown"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { DuplicateGlossaryDialog } from "@/components/dialogs/DuplicateGlossaryDialog"
@@ -82,8 +82,8 @@ export default function Glossary() {
                 console.log(`🎯 [Translate] Translating ${termsToTranslate.length} selected glossary terms (override mode)`)
                 toast.info(`Translating ${termsToTranslate.length} selected terms...`)
             } else {
-                // No selection - translate only terms with empty malay or chinese
-                termsToTranslate = terms.filter(term => !term.malay?.trim() || !term.chinese?.trim())
+                // No selection - translate only terms with empty translations (my or cn)
+                termsToTranslate = terms.filter(term => !term.my?.trim() || !term.cn?.trim())
                 console.log(`🎯 [Translate] Translating ${termsToTranslate.length} terms with empty translations`)
                 if (termsToTranslate.length === 0) {
                     toast.info('All terms already have translations!')
@@ -101,9 +101,9 @@ export default function Glossary() {
 
             console.log(`📝 [Translate] Using template: ${defaultTemplate.name}`)
 
-            // Call translation API
+            // Call translation API - use en field for source text
             const results = await translateBatch(
-                termsToTranslate.map(term => ({ id: term.id, en: term.english })),
+                termsToTranslate.map(term => ({ id: term.id, en: term.en })),
                 defaultTemplate,
                 {
                     targetLanguages: ['my', 'zh'],
@@ -111,15 +111,14 @@ export default function Glossary() {
                 }
             )
 
-            // Update terms with translations
+            // Update terms with translations - use PocketBase field names
             let successCount = 0
             for (const result of results) {
                 if (result.status !== 'error') {
                     await updateTerm(result.id, {
-                        malay: result.my,
-                        chinese: result.zh,
-                        status: 'draft', // Keep as draft for review
-                        dateModified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        my: result.my,
+                        cn: result.zh,
+                        status: 'draft' // Keep as draft for review
                     })
                     successCount++
                 }
@@ -192,9 +191,9 @@ export default function Glossary() {
             if (!term) return false
 
             const matchesSearch =
-                (term.english || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (term.malay || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (term.chinese || '').includes(searchQuery)
+                (term.en || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (term.my || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (term.cn || '').includes(searchQuery)
 
             // Status filter - if no selection, show all
             const matchesStatus = statusFilter.length === 0 || statusFilter.includes(term.status || 'draft')
@@ -227,15 +226,15 @@ export default function Glossary() {
         ? (terms || []).filter(term => term && selectedIds.includes(term.id))
         : filteredTerms // Use filtered terms for context if no selection (aligned with Project logic)
 
-    const hasEmptyTranslations = relevantTerms.some(term => term && (!term.malay?.trim() || !term.chinese?.trim()))
+    const hasEmptyTranslations = relevantTerms.some(term => term && (!term.my?.trim() || !term.cn?.trim()))
 
     // Check if ALL rows have translations filled (filtered view)
-    const allFilled = hasTerms && filteredTerms.every(term => term.malay?.trim() && term.chinese?.trim())
+    const allFilled = hasTerms && filteredTerms.every(term => term.my?.trim() && term.cn?.trim())
 
     // Check if SELECTED rows have translations filled
     const selectionFilled = hasSelection && terms
         .filter(t => selectedIds.includes(t.id))
-        .every(t => t.malay?.trim() && t.chinese?.trim())
+        .every(t => t.my?.trim() && t.cn?.trim())
 
     const allTranslated = hasTerms && !hasEmptyTranslations // simplified check (matches previous logic roughly but cleaning it up)
     // Actually, let's keep allTranslated as "Completed logic" (review or approved OR filled)
@@ -268,25 +267,25 @@ export default function Glossary() {
         }
     }
 
-    // Inline row editing state
+    // Inline row editing state - using PocketBase field names
     const [isAddingRow, setIsAddingRow] = useState(false)
-    const [newRow, setNewRow] = useState({ english: '', malay: '', chinese: '', category: 'General' })
+    const [newRow, setNewRow] = useState({ en: '', my: '', cn: '', category: 'General' })
 
     const handleCreate = () => {
         setIsAddingRow(true)
-        setNewRow({ english: '', malay: '', chinese: '', category: 'General' })
+        setNewRow({ en: '', my: '', cn: '', category: 'General' })
     }
 
     const handleSaveNewRow = async () => {
-        if (!newRow.english.trim()) {
+        if (!newRow.en.trim()) {
             toast.error('English term is required')
             return
         }
 
         const termToAdd = {
-            english: newRow.english.trim(),
-            malay: newRow.malay.trim(),
-            chinese: newRow.chinese.trim(),
+            en: newRow.en.trim(),
+            my: newRow.my.trim(),
+            cn: newRow.cn.trim(),
             category: newRow.category || 'General',
             status: 'draft',
             remark: ''
@@ -311,7 +310,7 @@ export default function Glossary() {
             await addTerm(termToAdd)
             toast.success('Term added successfully')
             setIsAddingRow(false)
-            setNewRow({ english: '', malay: '', chinese: '', category: 'General' })
+            setNewRow({ en: '', my: '', cn: '', category: 'General' })
             setDuplicateConfirm(null)
         } catch (error) {
             toast.error('Failed to add term')
@@ -320,7 +319,7 @@ export default function Glossary() {
 
     const handleCancelAddRow = () => {
         setIsAddingRow(false)
-        setNewRow({ english: '', malay: '', chinese: '', category: 'General' })
+        setNewRow({ en: '', my: '', cn: '', category: 'General' })
     }
 
     const handleNewRowKeyDown = (e) => {
@@ -360,9 +359,9 @@ export default function Glossary() {
     // Export to Excel
     const handleExport = () => {
         const exportData = terms.map(t => ({
-            'English': t.english,
-            'Bahasa Malaysia': t.malay,
-            '中文': t.chinese,
+            'English': t.en,
+            'Bahasa Malaysia': t.my,
+            '中文': t.cn,
             'Category': t.category,
             'Status': t.status,
             'Remark': t.remark || ''
@@ -391,21 +390,21 @@ export default function Glossary() {
         const uniqueTerms = []
 
         newTerms.forEach(newTerm => {
-            // Check against all existing terms
+            // Check against all existing terms (using PocketBase field names)
             const existingMatch = terms.find(existing => {
                 // Check English
-                if (newTerm.english && existing.english &&
-                    newTerm.english.toLowerCase().trim() === existing.english.toLowerCase().trim()) {
+                if (newTerm.en && existing.en &&
+                    newTerm.en.toLowerCase().trim() === existing.en.toLowerCase().trim()) {
                     return true
                 }
                 // Check Malay
-                if (newTerm.malay && existing.malay &&
-                    newTerm.malay.toLowerCase().trim() === existing.malay.toLowerCase().trim()) {
+                if (newTerm.my && existing.my &&
+                    newTerm.my.toLowerCase().trim() === existing.my.toLowerCase().trim()) {
                     return true
                 }
                 // Check Chinese
-                if (newTerm.chinese && existing.chinese &&
-                    newTerm.chinese.trim() === existing.chinese.trim()) {
+                if (newTerm.cn && existing.cn &&
+                    newTerm.cn.trim() === existing.cn.trim()) {
                     return true
                 }
                 return false
@@ -413,13 +412,13 @@ export default function Glossary() {
 
             if (existingMatch) {
                 // Determine which field matched
-                let matchedField = 'english'
-                if (newTerm.malay && existingMatch.malay &&
-                    newTerm.malay.toLowerCase().trim() === existingMatch.malay.toLowerCase().trim()) {
-                    matchedField = 'malay'
-                } else if (newTerm.chinese && existingMatch.chinese &&
-                    newTerm.chinese.trim() === existingMatch.chinese.trim()) {
-                    matchedField = 'chinese'
+                let matchedField = 'en'
+                if (newTerm.my && existingMatch.my &&
+                    newTerm.my.toLowerCase().trim() === existingMatch.my.toLowerCase().trim()) {
+                    matchedField = 'my'
+                } else if (newTerm.cn && existingMatch.cn &&
+                    newTerm.cn.trim() === existingMatch.cn.trim()) {
+                    matchedField = 'cn'
                 }
 
                 duplicateList.push({
@@ -496,11 +495,11 @@ export default function Glossary() {
         }
     }
 
-    // Column Definitions for DataTable - widths adjusted for Prompt Category
+    // Column Definitions for DataTable - using PocketBase field names (en, my, cn)
     const columns = [
-        { header: "English", accessor: "english", width: "22%", sortable: true, color: 'hsl(222, 47%, 11%)' },
-        { header: "Bahasa Malaysia", accessor: "malay", width: "20%", color: 'hsl(220, 9%, 46%)' },
-        { header: "Chinese", accessor: "chinese", width: "18%", color: 'hsl(220, 9%, 46%)' },
+        { header: "English", accessor: "en", width: "22%", sortable: true, color: 'hsl(222, 47%, 11%)' },
+        { header: "Bahasa Malaysia", accessor: "my", width: "20%", color: 'hsl(220, 9%, 46%)' },
+        { header: "Chinese", accessor: "cn", width: "18%", color: 'hsl(220, 9%, 46%)' },
         {
             header: "Status",
             accessor: "status",
@@ -763,8 +762,8 @@ export default function Glossary() {
                                 <input
                                     type="text"
                                     placeholder="English term"
-                                    value={newRow.english}
-                                    onChange={(e) => setNewRow(prev => ({ ...prev, english: e.target.value }))}
+                                    value={newRow.en}
+                                    onChange={(e) => setNewRow(prev => ({ ...prev, en: e.target.value }))}
                                     onKeyDown={handleNewRowKeyDown}
                                     autoFocus
                                     style={{
@@ -781,8 +780,8 @@ export default function Glossary() {
                                 <input
                                     type="text"
                                     placeholder="Bahasa Malaysia"
-                                    value={newRow.malay}
-                                    onChange={(e) => setNewRow(prev => ({ ...prev, malay: e.target.value }))}
+                                    value={newRow.my}
+                                    onChange={(e) => setNewRow(prev => ({ ...prev, my: e.target.value }))}
                                     onKeyDown={handleNewRowKeyDown}
                                     style={{
                                         width: '100%',
@@ -798,8 +797,8 @@ export default function Glossary() {
                                 <input
                                     type="text"
                                     placeholder="Chinese"
-                                    value={newRow.chinese}
-                                    onChange={(e) => setNewRow(prev => ({ ...prev, chinese: e.target.value }))}
+                                    value={newRow.cn}
+                                    onChange={(e) => setNewRow(prev => ({ ...prev, cn: e.target.value }))}
                                     onKeyDown={handleNewRowKeyDown}
                                     style={{
                                         width: '100%',

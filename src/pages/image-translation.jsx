@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Upload, Image, FileText, Sparkles, X, CheckCircle2, Clock, ArrowRight, Languages, Trash2, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { extractTextFromImage, extractAndTranslate, isVisionAvailable, translateBatch } from "@/services/gemini"
+import { extractTextFromImage, extractAndTranslate, isVisionAvailable, translateBatch } from "@/api/gemini"
 import { useGlossary } from "@/context/GlossaryContext"
 import { toast } from "sonner"
 

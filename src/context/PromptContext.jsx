@@ -1,9 +1,9 @@
 // PromptContext - Centralized state management for prompt templates
-// Now with Firestore persistence and Audit Trail
+// Now with PocketBase persistence and Audit Trail
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { FileText, Megaphone, Code, Scale, MessageSquare } from 'lucide-react'
-import * as firestoreService from '@/lib/firestore-service'
-import { logAction, AUDIT_ACTIONS } from '@/services/firebase/audit'
+import * as dbService from '@/api/pocketbase'
+import { logAction, AUDIT_ACTIONS } from '@/api/pocketbase'
 import { toast } from "sonner"
 
 // Safe auth hook - returns null user if auth context not ready
@@ -37,24 +37,29 @@ export function PromptProvider({ children }) {
     const [isLoading, setIsLoading] = useState(true)
     const [dataSource, setDataSource] = useState('loading')
 
-    // Load templates from Firestore on mount
+    // Load templates from PocketBase on mount
     useEffect(() => {
         async function loadData() {
             try {
-                console.log('🔄 [Firestore] Loading templates...')
-                const firestoreTemplates = await firestoreService.getTemplates()
+                console.log('🔄 [PocketBase] Loading templates...')
+
+                // Ensure default template exists
+                await dbService.getOrCreateDefaultTemplate()
+
+                // Load all templates
+                const pbTemplates = await dbService.getTemplates()
 
                 // Enhance with icon components
-                const enhanced = firestoreTemplates.map(t => ({
+                const enhanced = pbTemplates.map(t => ({
                     ...t,
                     icon: iconMap[t.iconName] || FileText,
                 }))
 
                 setTemplates(enhanced)
-                setDataSource('firestore')
-                console.log('✅ [Firestore] Loaded', firestoreTemplates.length, 'templates')
+                setDataSource('pocketbase')
+                console.log('✅ [PocketBase] Loaded', pbTemplates.length, 'templates')
             } catch (error) {
-                console.error('❌ [Firestore] Error loading templates:', error)
+                console.error('❌ [PocketBase] Error loading templates:', error)
                 toast.error("Failed to load templates")
                 setDataSource('error')
             } finally {
@@ -77,7 +82,7 @@ export function PromptProvider({ children }) {
         }
 
         try {
-            const created = await firestoreService.createTemplate(templateData)
+            const created = await dbService.createTemplate(templateData)
             const enhanced = { ...created, icon: iconMap[created.iconName] || FileText }
             setTemplates(prev => [enhanced, ...prev])
 
@@ -98,7 +103,7 @@ export function PromptProvider({ children }) {
     const updateTemplate = useCallback(async (id, updates) => {
         const existingTemplate = templates.find(t => t.id === id)
         try {
-            await firestoreService.updateTemplate(id, updates)
+            await dbService.updateTemplate(id, updates)
             const updatedTemplate = { ...existingTemplate, ...updates }
             setTemplates(prev => prev.map(t => t.id === id ? updatedTemplate : t))
 
@@ -119,7 +124,7 @@ export function PromptProvider({ children }) {
     // Delete a template (with Firestore sync)
     const deleteTemplate = useCallback(async (id) => {
         try {
-            await firestoreService.deleteTemplate(id)
+            await dbService.deleteTemplate(id)
             setTemplates(prev => prev.filter(t => t.id !== id))
         } catch (error) {
             console.error("Failed to delete template", error)

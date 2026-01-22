@@ -14,9 +14,14 @@ build/
 *.log
 npm-debug.log*
 
+# PocketBase (binary and database - each dev has their own)
+pocketbase/pocketbase.exe
+pocketbase/pb_data/
+
 # Archive (large folder, don't need in git)
 _archive/
 _archived/
+src/archive/
 
 # Documentation and text files (not needed in git)
 *.md

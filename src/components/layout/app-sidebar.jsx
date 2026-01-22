@@ -278,22 +278,26 @@ function ProjectWithPages({
               {/* Hover icons for project */}
               {hoveredProject && (
                 <div className="flex items-center gap-1 ml-auto" style={{ flexShrink: 0 }}>
-                  <button
-                    type="button"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     onClick={handleDeleteProject}
-                    className="p-0.5 hover:bg-rose-100 rounded transition-colors"
+                    onKeyDown={(e) => e.key === 'Enter' && handleDeleteProject(e)}
+                    className="p-0.5 hover:bg-rose-100 rounded transition-colors cursor-pointer"
                     title="Delete project"
                   >
                     <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-rose-500" />
-                  </button>
-                  <button
-                    type="button"
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={0}
                     onClick={handleAddPage}
-                    className="p-0.5 hover:bg-pink-100 rounded transition-colors"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddPage(e)}
+                    className="p-0.5 hover:bg-pink-100 rounded transition-colors cursor-pointer"
                     title="Add page"
                   >
                     <Plus className="h-3.5 w-3.5 text-gray-400 hover:text-pink-500" />
-                  </button>
+                  </span>
                 </div>
               )}
 
@@ -369,22 +373,26 @@ function ProjectWithPages({
                           {/* Hover icons for page */}
                           {isHovered && (
                             <div className="flex items-center gap-0.5 ml-auto" style={{ flexShrink: 0 }}>
-                              <button
-                                type="button"
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => handleDeletePage(e, page.id)}
-                                className="p-0.5 hover:bg-rose-100 rounded transition-colors"
+                                onKeyDown={(e) => e.key === 'Enter' && handleDeletePage(e, page.id)}
+                                className="p-0.5 hover:bg-rose-100 rounded transition-colors cursor-pointer"
                                 title="Delete page"
                               >
                                 <Trash2 className="h-3 w-3 text-gray-400 hover:text-rose-500" />
-                              </button>
-                              <button
-                                type="button"
+                              </span>
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => handleStartRename(e, page)}
-                                className="p-0.5 hover:bg-blue-100 rounded transition-colors"
+                                onKeyDown={(e) => e.key === 'Enter' && handleStartRename(e, page)}
+                                className="p-0.5 hover:bg-blue-100 rounded transition-colors cursor-pointer"
                                 title="Rename page"
                               >
                                 <Pencil className="h-3 w-3 text-gray-400 hover:text-blue-500" />
-                              </button>
+                              </span>
                             </div>
                           )}
                         </a>

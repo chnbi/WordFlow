@@ -80,15 +80,16 @@ export default function ImportGlossaryDialog({ open, onOpenChange, onImport }) {
         const sheetData = sheets.find(s => s.name === selectedSheet)
         if (!sheetData) return
 
-        // Map entries to glossary format
+        // Map entries to PocketBase glossary_terms format
+        // Schema uses: en, my, cn (not english, malay, chinese)
         const terms = (sheetData.entries || []).map(entry => ({
-            term: entry.english || entry.term || '', // Flexible mapping
-            english: entry.english || entry.term || '', // Keep 'english' for consistency
-            malay: entry.malay || '',
-            chinese: entry.chinese || '',
+            en: entry.english || entry.term || entry.en || '',
+            my: entry.malay || entry.my || '',
+            cn: entry.chinese || entry.cn || '',
             category: entry.category || 'General',
-            remark: entry.remark || ''
-        })).filter(t => t.term) // Only include valid terms
+            remark: entry.remark || '',
+            status: 'draft'
+        })).filter(t => t.en) // Only include valid terms with English text
 
         onImport(terms)
         handleClose()

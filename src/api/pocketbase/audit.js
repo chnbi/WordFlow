@@ -1,10 +1,5 @@
-/**
- * Audit Trail Service
- * Logs all user actions for compliance, peer review, and history tracking
- */
-
-import { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, limit } from 'firebase/firestore'
-import { db } from './client'
+// services/pocketbase/audit.js - Audit Trail operations for PocketBase
+import pb from './client'
 
 // Action types for consistency
 export const AUDIT_ACTIONS = {
@@ -39,39 +34,26 @@ export const AUDIT_ACTIONS = {
 
 /**
  * Log an action to the audit trail
- * 
- * @param {Object} user - Current user { uid, email }
- * @param {string} action - Action type from AUDIT_ACTIONS
- * @param {string} entityType - Type of entity: 'row', 'project', 'glossary', 'prompt'
- * @param {string} entityId - ID of the entity affected
- * @param {Object} options - Additional options
- * @param {string} options.projectId - Project ID for context
- * @param {Object} options.content - { before, after } for Option B actions
- * @param {Object} options.metadata - Any additional metadata
  */
 export async function logAction(user, action, entityType, entityId, options = {}) {
-    if (!user?.uid) {
+    if (!user?.id && !user?.uid) {
         console.warn('[Audit] No user provided, skipping log')
         return null
     }
 
     try {
-        const logEntry = {
-            timestamp: serverTimestamp(),
-            userId: user.uid,
+        const record = await pb.collection('audit_logs').create({
+            userId: user.id || user.uid,
             userEmail: user.email || 'unknown',
             action,
             entityType,
             entityId,
-            projectId: options.projectId || null,
+            projectId: options.projectId || '',
             content: options.content || null,
             metadata: options.metadata || null,
-        }
-
-        const docRef = await addDoc(collection(db, 'audit_logs'), logEntry)
+        })
         console.log(`[Audit] Logged: ${action} on ${entityType}/${entityId}`)
-        return docRef.id
-
+        return record.id
     } catch (error) {
         console.error('[Audit] Failed to log action:', error)
         return null
@@ -79,29 +61,18 @@ export async function logAction(user, action, entityType, entityId, options = {}
 }
 
 /**
- * Get audit logs for a specific entity (row, project, etc.)
- * 
- * @param {string} entityType - Type of entity
- * @param {string} entityId - ID of the entity
- * @param {number} maxResults - Maximum number of results (default 50)
+ * Get audit logs for a specific entity
  */
 export async function getEntityHistory(entityType, entityId, maxResults = 50) {
     try {
-        const q = query(
-            collection(db, 'audit_logs'),
-            where('entityType', '==', entityType),
-            where('entityId', '==', entityId),
-            orderBy('timestamp', 'desc'),
-            limit(maxResults)
-        )
-
-        const snapshot = await getDocs(q)
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().timestamp?.toDate?.() || new Date()
+        const records = await pb.collection('audit_logs').getList(1, maxResults, {
+            filter: `entityType = "${entityType}" && entityId = "${entityId}"`,
+            sort: '-created'
+        })
+        return records.items.map(record => ({
+            ...record,
+            timestamp: new Date(record.created)
         }))
-
     } catch (error) {
         console.error('[Audit] Failed to get entity history:', error)
         return []
@@ -110,26 +81,17 @@ export async function getEntityHistory(entityType, entityId, maxResults = 50) {
 
 /**
  * Get recent activity for a project
- * 
- * @param {string} projectId - Project ID
- * @param {number} maxResults - Maximum number of results (default 20)
  */
 export async function getProjectActivity(projectId, maxResults = 20) {
     try {
-        const q = query(
-            collection(db, 'audit_logs'),
-            where('projectId', '==', projectId),
-            orderBy('timestamp', 'desc'),
-            limit(maxResults)
-        )
-
-        const snapshot = await getDocs(q)
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().timestamp?.toDate?.() || new Date()
+        const records = await pb.collection('audit_logs').getList(1, maxResults, {
+            filter: `projectId = "${projectId}"`,
+            sort: '-created'
+        })
+        return records.items.map(record => ({
+            ...record,
+            timestamp: new Date(record.created)
         }))
-
     } catch (error) {
         console.error('[Audit] Failed to get project activity:', error)
         return []
@@ -138,40 +100,23 @@ export async function getProjectActivity(projectId, maxResults = 20) {
 
 /**
  * Get all audit logs (admin only)
- * 
- * @param {Object} filters - { projectId?, userId?, action? }
- * @param {number} maxResults - Maximum number of results (default 100)
  */
 export async function getAllAuditLogs(filters = {}, maxResults = 100) {
     try {
-        let q = query(
-            collection(db, 'audit_logs'),
-            orderBy('timestamp', 'desc'),
-            limit(maxResults)
-        )
+        let filterParts = []
+        if (filters.projectId) filterParts.push(`projectId = "${filters.projectId}"`)
+        if (filters.userId) filterParts.push(`userId = "${filters.userId}"`)
+        if (filters.action) filterParts.push(`action = "${filters.action}"`)
 
-        // Note: Firestore requires indexes for compound queries
-        // For now, we filter client-side for simplicity
-        const snapshot = await getDocs(q)
-        let results = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            timestamp: doc.data().timestamp?.toDate?.() || new Date()
+        const records = await pb.collection('audit_logs').getList(1, maxResults, {
+            filter: filterParts.length > 0 ? filterParts.join(' && ') : '',
+            sort: '-created'
+        })
+
+        return records.items.map(record => ({
+            ...record,
+            timestamp: new Date(record.created)
         }))
-
-        // Client-side filtering
-        if (filters.projectId) {
-            results = results.filter(r => r.projectId === filters.projectId)
-        }
-        if (filters.userId) {
-            results = results.filter(r => r.userId === filters.userId)
-        }
-        if (filters.action) {
-            results = results.filter(r => r.action === filters.action)
-        }
-
-        return results
-
     } catch (error) {
         console.error('[Audit] Failed to get audit logs:', error)
         return []
@@ -206,7 +151,7 @@ export function formatAction(action) {
 }
 
 /**
- * Format relative time (e.g., "2 hours ago")
+ * Format relative time
  */
 export function formatRelativeTime(date) {
     const now = new Date()

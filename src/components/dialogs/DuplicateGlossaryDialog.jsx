@@ -201,7 +201,7 @@ export function DuplicateGlossaryDialog({ isOpen, onClose, duplicates = [], onRe
                             </button>
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '14px', fontWeight: 500, color: 'hsl(222, 47%, 11%)', marginBottom: '4px' }}>
-                                    {dup.new.english || dup.new.malay || dup.new.chinese}
+                                    {dup.new.en || dup.new.english || dup.new.my || dup.new.malay || dup.new.cn || dup.new.chinese}
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'hsl(220, 9%, 46%)' }}>
                                     Matched on: {dup.matchedField} — Existing: "{dup.existing[dup.matchedField]}"

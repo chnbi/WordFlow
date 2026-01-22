@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react"
 import { useGlossary } from "@/context/GlossaryContext"
 import { usePrompts } from "@/context/PromptContext"
-import { translateBatch } from "@/services/gemini/text"
+import { translateBatch } from "@/api/gemini/text"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Sparkles } from "lucide-react"

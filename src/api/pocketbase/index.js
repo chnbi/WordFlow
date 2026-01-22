@@ -1,4 +1,4 @@
-// services/firebase/index.js - Barrel export for all Firebase services
+// services/pocketbase/index.js - Barrel export for all PocketBase services
 // This provides a single import point with full backward compatibility
 
 // Project operations
@@ -29,7 +29,8 @@ export {
     createTemplate,
     updateTemplate,
     deleteTemplate,
-    seedDefaultTemplates
+    getOrCreateDefaultTemplate,
+    DEFAULT_TEMPLATE
 } from './templates'
 
 // Glossary operations
@@ -57,3 +58,17 @@ export {
     formatRelativeTime,
     AUDIT_ACTIONS
 } from './audit'
+
+// Role & User Management
+export {
+    getUsers,
+    getUser,
+    getUserByEmail,
+    upsertUser,
+    updateUserRole,
+    deleteUser,
+    getRoles
+} from './roles'
+
+// Export PocketBase client for direct access if needed
+export { default as pb } from './client'

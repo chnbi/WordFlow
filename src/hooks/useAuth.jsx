@@ -1,78 +1,150 @@
-// Authentication Hook
-import { useState, useEffect, useContext, createContext } from 'react'
-import {
-    onAuthStateChanged,
-    signInWithPopup,
-    signOut as firebaseSignOut
-} from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { auth, googleProvider, db } from '../services/firebase/client'
+// Authentication Hook - PocketBase Integration
+import { useState, useEffect, useContext, createContext, useCallback } from 'react'
+import pb from '../api/pocketbase/client'
+import { getUserByEmail, upsertUser } from '../api/pocketbase'
+import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor } from '../lib/permissions'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
-    const [userRole, setUserRole] = useState(null)
+    const [userRole, setUserRole] = useState(ROLES.EDITOR)
     const [loading, setLoading] = useState(true)
 
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                // Get or create user document
-                const userDocRef = doc(db, 'users', firebaseUser.uid)
-                const userDoc = await getDoc(userDocRef)
+    // Load user data and role from PocketBase
+    const loadUserRole = useCallback(async (authUser) => {
+        if (!authUser?.email) {
+            setUserRole(ROLES.EDITOR)
+            return
+        }
 
-                if (userDoc.exists()) {
-                    setUserRole(userDoc.data().role)
-                } else {
-                    // First-time user - create with default 'editor' role
-                    await setDoc(userDocRef, {
-                        email: firebaseUser.email,
-                        displayName: firebaseUser.displayName,
-                        photoURL: firebaseUser.photoURL,
-                        role: 'editor',
-                        createdAt: new Date().toISOString()
-                    })
-                    setUserRole('editor')
-                }
+        try {
+            // Try to find user in our users collection
+            const userData = await getUserByEmail(authUser.email)
 
-                setUser(firebaseUser)
+            if (userData) {
+                setUserRole(userData.role || ROLES.EDITOR)
+                console.log('✅ [PocketBase] User role loaded:', userData.role)
             } else {
-                setUser(null)
-                setUserRole(null)
+                // First-time user - create with default 'editor' role
+                await upsertUser({
+                    email: authUser.email,
+                    name: authUser.name || authUser.username || 'User',
+                    avatar: authUser.avatar || null,
+                    role: ROLES.EDITOR
+                })
+                setUserRole(ROLES.EDITOR)
+                console.log('✅ [PocketBase] New user created with editor role')
             }
-            setLoading(false)
-        })
-
-        return () => unsubscribe()
+        } catch (error) {
+            console.error('Error loading user role:', error)
+            setUserRole(ROLES.EDITOR)
+        }
     }, [])
 
-    const signIn = async () => {
+    useEffect(() => {
+        // Check if there's already an authenticated user
+        const checkAuth = async () => {
+            try {
+                if (pb.authStore.isValid && pb.authStore.model) {
+                    const authUser = pb.authStore.model
+                    setUser({
+                        id: authUser.id,
+                        email: authUser.email,
+                        name: authUser.name || authUser.username,
+                        avatar: authUser.avatar
+                    })
+                    await loadUserRole(authUser)
+                } else {
+                    setUser(null)
+                    setUserRole(ROLES.EDITOR)
+                }
+            } catch (error) {
+                console.error('Auth check error:', error)
+                setUser(null)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        checkAuth()
+
+        // Listen for auth changes
+        const unsubscribe = pb.authStore.onChange((token, model) => {
+            if (model) {
+                setUser({
+                    id: model.id,
+                    email: model.email,
+                    name: model.name || model.username,
+                    avatar: model.avatar
+                })
+                loadUserRole(model)
+            } else {
+                setUser(null)
+                setUserRole(ROLES.EDITOR)
+            }
+        })
+
+        return () => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe()
+            }
+        }
+    }, [loadUserRole])
+
+    const signIn = async (email, password) => {
         try {
-            await signInWithPopup(auth, googleProvider)
+            const authData = await pb.collection('users').authWithPassword(email, password)
+            console.log('✅ [PocketBase] User signed in:', authData.record.email)
+            return authData
         } catch (error) {
             console.error('Sign in error:', error)
             throw error
         }
     }
 
+    const signInWithOAuth = async (provider = 'google') => {
+        try {
+            const authData = await pb.collection('users').authWithOAuth2({ provider })
+            console.log('✅ [PocketBase] OAuth sign in:', authData.record.email)
+            return authData
+        } catch (error) {
+            console.error('OAuth sign in error:', error)
+            throw error
+        }
+    }
+
     const signOut = async () => {
         try {
-            await firebaseSignOut(auth)
+            pb.authStore.clear()
+            setUser(null)
+            setUserRole(ROLES.EDITOR)
+            console.log('✅ [PocketBase] User signed out')
         } catch (error) {
             console.error('Sign out error:', error)
             throw error
         }
     }
 
+    // Helper to check if user can perform an action
+    const canDo = useCallback((action) => {
+        return checkPermission(userRole, action)
+    }, [userRole])
+
     const value = {
         user,
-        userRole,
+        role: userRole,
         loading,
         signIn,
+        signInWithOAuth,
         signOut,
-        isManager: userRole === 'manager',
-        isEditor: userRole === 'editor' || userRole === 'manager',
+        canDo,
+        isManager: userRole === ROLES.MANAGER,
+        isEditor: userRole === ROLES.EDITOR,
+        // Expose permission utilities
+        getRoleLabel,
+        getRoleColor,
+        ROLES,
     }
 
     return (
@@ -89,3 +161,5 @@ export function useAuth() {
     }
     return context
 }
+
+export { ROLES }

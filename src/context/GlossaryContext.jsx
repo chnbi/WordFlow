@@ -1,8 +1,8 @@
 // GlossaryContext - Centralized state management for glossary terms
-// Now with Firestore persistence and Audit Trail
+// Now with PocketBase persistence and Audit Trail
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import * as firestoreService from '@/lib/firestore-service'
-import { logAction, AUDIT_ACTIONS } from '@/services/firebase/audit'
+import * as dbService from '@/api/pocketbase'
+import { logAction, AUDIT_ACTIONS } from '@/api/pocketbase'
 import { toast } from "sonner"
 
 // Safe auth hook - returns null user if auth context not ready
@@ -33,11 +33,11 @@ export function GlossaryProvider({ children }) {
     useEffect(() => {
         async function loadData() {
             try {
-                console.log('🔄 [Firestore] Loading glossary terms...')
-                const firestoreTerms = await firestoreService.getGlossaryTerms()
+                console.log('🔄 [PocketBase] Loading glossary terms...')
+                const firestoreTerms = await dbService.getGlossaryTerms()
 
                 // Load categories
-                const firestoreCategories = await firestoreService.getGlossaryCategories()
+                const firestoreCategories = await dbService.getGlossaryCategories()
                 const finalCategories = firestoreCategories.length > 0
                     ? firestoreCategories
                     : [] // No fallback categories
@@ -45,9 +45,9 @@ export function GlossaryProvider({ children }) {
                 setTerms(firestoreTerms)
                 setCategories(finalCategories)
                 setDataSource('firestore')
-                console.log('✅ [Firestore] Loaded', firestoreTerms.length, 'glossary terms')
+                console.log('✅ [PocketBase] Loaded', firestoreTerms.length, 'glossary terms')
             } catch (error) {
-                console.error('❌ [Firestore] Error loading glossary:', error)
+                console.error('❌ [PocketBase] Error loading glossary:', error)
                 toast.error("Failed to load glossary")
                 setDataSource('error')
             } finally {
@@ -58,15 +58,20 @@ export function GlossaryProvider({ children }) {
         loadData()
     }, [])
 
-    // Add a new term (with Firestore sync)
+    // Add a new term (with PocketBase sync)
     const addTerm = useCallback(async (term) => {
+        // Only pass valid PocketBase fields
         const termData = {
-            ...term,
-            dateModified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            en: term.en || term.english || '',
+            my: term.my || term.malay || '',
+            cn: term.cn || term.chinese || '',
+            category: term.category || 'General',
+            remark: term.remark || '',
+            status: term.status || 'draft'
         }
 
         try {
-            const created = await firestoreService.createGlossaryTerm(termData)
+            const created = await dbService.createGlossaryTerm(termData)
             setTerms(prev => [created, ...prev])
 
             // Audit log
@@ -84,13 +89,19 @@ export function GlossaryProvider({ children }) {
 
     // Batch add terms
     const addTerms = useCallback(async (newTerms) => {
+        // PocketBase auto-generates created/updated timestamps
+        // Only pass valid fields: en, my, cn, category, remark, status
         const termDataArray = newTerms.map(term => ({
-            ...term,
-            dateModified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            en: term.en || '',
+            my: term.my || '',
+            cn: term.cn || '',
+            category: term.category || 'General',
+            remark: term.remark || '',
+            status: term.status || 'draft'
         }))
 
         try {
-            const createdTerms = await firestoreService.createGlossaryTerms(termDataArray)
+            const createdTerms = await dbService.createGlossaryTerms(termDataArray)
             setTerms(prev => [...createdTerms, ...prev])
             return createdTerms
         } catch (error) {
@@ -104,7 +115,7 @@ export function GlossaryProvider({ children }) {
     const updateTerm = useCallback(async (id, updates) => {
         const existingTerm = terms.find(t => t.id === id)
         try {
-            await firestoreService.updateGlossaryTerm(id, updates)
+            await dbService.updateGlossaryTerm(id, updates)
             const updatedTerm = {
                 ...existingTerm,
                 ...updates,
@@ -126,7 +137,7 @@ export function GlossaryProvider({ children }) {
     const deleteTerm = useCallback(async (id) => {
         const existingTerm = terms.find(t => t.id === id)
         try {
-            await firestoreService.deleteGlossaryTerm(id)
+            await dbService.deleteGlossaryTerm(id)
             setTerms(prev => prev.filter(t => t.id !== id))
 
             // Audit log
@@ -142,7 +153,7 @@ export function GlossaryProvider({ children }) {
     // Bulk delete (with Firestore sync)
     const deleteTerms = useCallback(async (ids) => {
         try {
-            await firestoreService.deleteGlossaryTerms(ids)
+            await dbService.deleteGlossaryTerms(ids)
             setTerms(prev => prev.filter(t => !ids.includes(t.id)))
         } catch (error) {
             console.error("Failed to delete terms", error)
@@ -153,7 +164,7 @@ export function GlossaryProvider({ children }) {
     // Add Category
     const addCategory = useCallback(async (categoryData) => {
         try {
-            const newCat = await firestoreService.createGlossaryCategory(categoryData)
+            const newCat = await dbService.createGlossaryCategory(categoryData)
             setCategories(prev => [...prev, newCat])
             return newCat
         } catch (error) {
@@ -166,7 +177,7 @@ export function GlossaryProvider({ children }) {
     // Delete Category
     const deleteCategory = useCallback(async (id) => {
         try {
-            await firestoreService.deleteGlossaryCategory(id)
+            await dbService.deleteGlossaryCategory(id)
             setCategories(prev => prev.filter(c => c.id !== id))
         } catch (error) {
             console.error("Failed to delete category", error)

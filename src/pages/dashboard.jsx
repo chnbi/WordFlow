@@ -66,7 +66,7 @@ export default function Dashboard() {
             })
 
             if (result?.id) {
-                toast.success(`Imported "root" successfully! Redirecting...`)
+                toast.success(`Imported "${projectName}" successfully! Redirecting...`)
                 // Use setTimeout to allow toast to be seen briefly/ensure state update
                 setTimeout(() => {
                     window.location.hash = `#project/${result.id}${result.firstPageId ? `?page=${result.firstPageId}` : ''}`

@@ -4,19 +4,19 @@ import { createContext, useContext, useCallback } from 'react'
 import { useProjectData } from '@/hooks/useProjectData'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useRowSelection } from '@/hooks/useRowSelection'
-import * as firestoreService from '@/services/firebase'
+import * as dbService from '@/api/pocketbase'
 
 const ProjectContext = createContext(null)
 
 export function ProjectProvider({ children }) {
-    // Data hook - handles all Firebase CRUD
+    // Data hook - handles all PocketBase CRUD
     const data = useProjectData()
 
     // Fetch only APPROVED glossary terms for translation
     // This ensures unapproved/pending terms are not used in AI translations
     const fetchGlossaryTerms = useCallback(async () => {
         try {
-            const terms = await firestoreService.getApprovedGlossaryTerms()
+            const terms = await dbService.getApprovedGlossaryTerms()
             return terms
         } catch (error) {
             console.warn('[Translation] Failed to fetch glossary:', error)

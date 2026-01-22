@@ -1,10 +1,10 @@
-// useProjectData - Hook for managing project data and Firebase CRUD
+// useProjectData - Hook for managing project data with PocketBase
 import { useState, useCallback, useEffect } from 'react'
-import * as firestoreService from '@/services/firebase'
+import * as dbService from '@/api/pocketbase'
 import { toast } from 'sonner'
 
 /**
- * Manages project data loading and CRUD operations with Firebase
+ * Manages project data loading and CRUD operations with PocketBase
  * @returns Project data state and handlers
  */
 export function useProjectData() {
@@ -19,11 +19,11 @@ export function useProjectData() {
     useEffect(() => {
         async function loadData() {
             try {
-                console.log('🔄 [Firestore] Loading projects...')
-                const firestoreProjects = await firestoreService.getProjects()
+                console.log('🔄 [PocketBase] Loading projects...')
+                const firestoreProjects = await dbService.getProjects()
 
                 if (firestoreProjects.length === 0) {
-                    console.log('📦 [Firestore] No projects found')
+                    console.log('📦 [PocketBase] No projects found')
                     setProjects([])
                     setDataSource('firestore')
                 } else {
@@ -32,20 +32,20 @@ export function useProjectData() {
 
                     for (const project of firestoreProjects) {
                         try {
-                            const rows = await firestoreService.getProjectRows(project.id)
+                            const rows = await dbService.getProjectRows(project.id)
                             allRows[project.id] = rows || []
 
-                            let pages = await firestoreService.getProjectPages(project.id)
+                            let pages = await dbService.getProjectPages(project.id)
                             let pageRows = {}
 
                             // Auto-migrate legacy projects: if has rows but no pages, create Page 1
                             if (pages.length === 0 && rows && rows.length > 0) {
                                 console.log(`🔄 [Migration] Project ${project.id} has ${rows.length} legacy rows, migrating to Page 1...`)
                                 try {
-                                    const page = await firestoreService.addProjectPage(project.id, { name: 'Page 1' })
+                                    const page = await dbService.addProjectPage(project.id, { name: 'Page 1' })
                                     // Move rows to the new page
                                     for (const row of rows) {
-                                        await firestoreService.addPageRows(project.id, page.id, [row])
+                                        await dbService.addPageRows(project.id, page.id, [row])
                                     }
                                     pages = [page]
                                     pageRows[page.id] = rows
@@ -56,7 +56,7 @@ export function useProjectData() {
                             } else {
                                 // Load page rows normally
                                 for (const page of pages) {
-                                    const pRows = await firestoreService.getPageRows(project.id, page.id)
+                                    const pRows = await dbService.getPageRows(project.id, page.id)
                                     pageRows[page.id] = pRows || []
                                 }
                             }
@@ -75,10 +75,10 @@ export function useProjectData() {
                     setProjectRows(allRows)
                     setProjectPages(allPagesData)
                     setDataSource('firestore')
-                    console.log('✅ [Firestore] Loaded', firestoreProjects.length, 'projects')
+                    console.log('✅ [PocketBase] Loaded', firestoreProjects.length, 'projects')
                 }
             } catch (error) {
-                console.error('❌ [Firestore] Error loading data:', error)
+                console.error('❌ [PocketBase] Error loading data:', error)
                 toast.error("Failed to load projects from database")
                 setDataSource('error')
                 setProjects([])
@@ -168,12 +168,12 @@ export function useProjectData() {
         if (dataSource === 'firestore') {
             if (pageIdForRow) {
                 // Row is in a page - use page-specific update
-                console.log(`✏️ [Firestore] Updating page row: project=${projectId}, page=${pageIdForRow}, row=${rowId}`)
-                firestoreService.updatePageRow(projectId, pageIdForRow, rowId, updates).catch(console.error)
+                console.log(`✏️ [PocketBase] Updating page row: project=${projectId}, page=${pageIdForRow}, row=${rowId}`)
+                dbService.updatePageRow(projectId, pageIdForRow, rowId, updates).catch(console.error)
             } else {
                 // Row is in legacy flat structure
-                console.log(`✏️ [Firestore] Updating legacy row: project=${projectId}, row=${rowId}`)
-                firestoreService.updateProjectRow(projectId, rowId, updates).catch(console.error)
+                console.log(`✏️ [PocketBase] Updating legacy row: project=${projectId}, row=${rowId}`)
+                dbService.updateProjectRow(projectId, rowId, updates).catch(console.error)
             }
         }
     }, [dataSource, projectPages])
@@ -209,7 +209,7 @@ export function useProjectData() {
 
         // Sync to Firestore
         if (dataSource === 'firestore') {
-            firestoreService.updateProjectRows(projectId, rowUpdates).catch(console.error)
+            dbService.updateProjectRows(projectId, rowUpdates).catch(console.error)
         }
     }, [dataSource])
 
@@ -228,7 +228,7 @@ export function useProjectData() {
 
         if (dataSource === 'firestore') {
             try {
-                await firestoreService.addProjectRows(projectId, rowsWithIds)
+                await dbService.addProjectRows(projectId, rowsWithIds)
             } catch (error) {
                 console.error('Error adding rows to Firestore:', error)
             }
@@ -258,7 +258,7 @@ export function useProjectData() {
 
         if (dataSource === 'firestore') {
             try {
-                await firestoreService.addPageRows(projectId, pageId, rowsWithIds)
+                await dbService.addPageRows(projectId, pageId, rowsWithIds)
                 toast.success(`Added ${rowsWithIds.length} row(s)`)
             } catch (error) {
                 console.error('Error adding rows to page:', error)
@@ -294,9 +294,9 @@ export function useProjectData() {
         if (dataSource === 'firestore') {
             try {
                 if (currentPageId) {
-                    await firestoreService.deletePageRows(projectId, currentPageId, rowIds)
+                    await dbService.deletePageRows(projectId, currentPageId, rowIds)
                 } else {
-                    await firestoreService.deleteProjectRows(projectId, rowIds)
+                    await dbService.deleteProjectRows(projectId, rowIds)
                 }
                 toast.success(`Deleted ${rowIds.length} row(s)`)
             } catch (error) {
@@ -325,7 +325,7 @@ export function useProjectData() {
         if (dataSource === 'firestore') {
             try {
                 // 1. Create Project
-                const created = await firestoreService.createProject(projectData)
+                const created = await dbService.createProject(projectData)
                 createdProjectId = created.id
 
                 const newProject = { ...projectData, id: createdProjectId }
@@ -343,18 +343,21 @@ export function useProjectData() {
                         const rows = sheets[sheetName]
 
                         // Create Page
-                        const page = await firestoreService.addProjectPage(createdProjectId, { name: sheetName })
+                        const page = await dbService.addProjectPage(createdProjectId, { name: sheetName })
                         if (index === 0) firstPageId = page.id
 
-                        // Add Rows
-                        const rowsWithIds = rows.map((row, idx) => ({
-                            ...row,
-                            id: crypto.randomUUID(),
-                            status: 'draft'
-                        }))
-                        await firestoreService.addPageRows(createdProjectId, page.id, rowsWithIds)
+                        // Add Rows - only include valid fields for PocketBase
+                        const validFields = ['en', 'my', 'zh', 'status', 'promptId', 'context']
+                        const cleanRows = rows.map((row) => {
+                            const cleaned = { status: 'draft' }
+                            validFields.forEach(field => {
+                                if (row[field] !== undefined) cleaned[field] = row[field]
+                            })
+                            return cleaned
+                        })
+                        const createdRows = await dbService.addPageRows(createdProjectId, page.id, cleanRows)
 
-                        // Update Local State for Page
+                        // Update Local State for Page with PocketBase-generated records
                         setProjectPages(prev => ({
                             ...prev,
                             [createdProjectId]: {
@@ -362,14 +365,14 @@ export function useProjectData() {
                                 pages: [...(prev[createdProjectId]?.pages || []), page],
                                 pageRows: {
                                     ...(prev[createdProjectId]?.pageRows || {}),
-                                    [page.id]: rowsWithIds
+                                    [page.id]: createdRows
                                 }
                             }
                         }))
                     }
                 } else {
                     // Create default "Page 1" for new empty projects
-                    const page = await firestoreService.addProjectPage(createdProjectId, { name: 'Page 1' })
+                    const page = await dbService.addProjectPage(createdProjectId, { name: 'Page 1' })
                     firstPageId = page.id
 
                     setProjectPages(prev => ({
@@ -408,7 +411,7 @@ export function useProjectData() {
         ))
 
         if (dataSource === 'firestore') {
-            firestoreService.updateProject(id, updates).catch(console.error)
+            dbService.updateProject(id, updates).catch(console.error)
         }
     }, [dataSource])
 
@@ -421,16 +424,16 @@ export function useProjectData() {
         })
 
         if (dataSource === 'firestore') {
-            firestoreService.deleteProject(id).catch(console.error)
+            dbService.deleteProject(id).catch(console.error)
         }
     }, [dataSource])
 
     // Add a project page
     const addProjectPage = useCallback(async (projectId, pageData, rows = []) => {
         if (dataSource === 'firestore') {
-            const page = await firestoreService.addProjectPage(projectId, pageData)
+            const page = await dbService.addProjectPage(projectId, pageData)
             if (rows.length > 0) {
-                await firestoreService.addPageRows(projectId, page.id, rows)
+                await dbService.addPageRows(projectId, page.id, rows)
             }
             setProjectPages(prev => ({
                 ...prev,
@@ -450,7 +453,7 @@ export function useProjectData() {
     // Delete a project page
     const deleteProjectPage = useCallback(async (projectId, pageId) => {
         if (dataSource === 'firestore') {
-            await firestoreService.deleteProjectPage(projectId, pageId)
+            await dbService.deleteProjectPage(projectId, pageId)
             setProjectPages(prev => {
                 const projectData = prev[projectId] || { pages: [], pageRows: {} }
                 const newPages = projectData.pages.filter(p => p.id !== pageId)
@@ -474,7 +477,7 @@ export function useProjectData() {
     // Rename a project page
     const renameProjectPage = useCallback(async (projectId, pageId, newName) => {
         if (dataSource === 'firestore') {
-            await firestoreService.renameProjectPage(projectId, pageId, newName)
+            await dbService.renameProjectPage(projectId, pageId, newName)
             setProjectPages(prev => {
                 const projectData = prev[projectId] || { pages: [], pageRows: {} }
                 const newPages = projectData.pages.map(p =>

@@ -11,7 +11,7 @@ import { useApprovalNotifications } from "@/hooks/useApprovalNotifications"
 import { useAuth } from "@/App"
 import * as XLSX from "xlsx"
 import { parseExcelFile } from "@/lib/excel"
-import { translateBatch } from "@/services/gemini/text"
+import { translateBatch } from "@/api/gemini/text"
 import { toast } from "sonner"
 import { DataTable } from "@/components/ui/DataTable"
 import { PromptCategoryDropdown } from "@/components/ui/PromptCategoryDropdown"
@@ -22,7 +22,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
-import { getStatusConfig } from "@/lib/constants"
+import { getStatusConfig, LANGUAGES } from "@/lib/constants"
 import { ConfirmDialog } from "@/components/dialogs"
 import { GlossaryHighlighter } from "@/components/ui/GlossaryHighlighter"
 
@@ -84,6 +84,7 @@ export default function ProjectView({ projectId }) {
     const pageIdFromUrl = urlParams.get('page')
 
     const project = getProject(id)
+    const targetLanguages = project?.targetLanguages || ['my', 'zh'] // Get early for use in filters
     const pages = getProjectPages(id)
     const currentPageId = getSelectedPageId(id)
 
@@ -120,13 +121,13 @@ export default function ProjectView({ projectId }) {
         ? getPageRows(id, currentPageId)
         : legacyRows
 
-    // Apply search and status filters
+    // Apply search and status filters - search across source + target languages
     const rows = (allRows || []).filter(row => {
         if (!row) return false
+        const searchLower = searchQuery.toLowerCase()
         const matchesSearch = !searchQuery ||
-            (row.en || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (row.my || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (row.zh || '').toLowerCase().includes(searchQuery.toLowerCase())
+            (row.en || '').toLowerCase().includes(searchLower) ||
+            targetLanguages.some(lang => (row[lang] || '').toLowerCase().includes(searchLower))
 
         // Status filter - if no selection, show all
         const matchesStatus = statusFilter.length === 0 || statusFilter.includes(row.status || 'draft')
@@ -138,21 +139,28 @@ export default function ProjectView({ projectId }) {
     const selectedCount = selectedRowIds.size
     const hasSelection = selectedCount > 0
 
+    // targetLanguages is already declared above near project fetch
+
+    // Helper: Check if row has all target translations filled
+    const isRowFilled = (row) => {
+        return targetLanguages.every(lang => row[lang]?.trim())
+    }
+
     // Helper variables for Action Bar Logic
     const hasRows = rows.length > 0
 
-    // Check if ALL rows have translations filled (regardless of status)
-    const allFilled = hasRows && rows.every(r => r.my?.trim() && r.zh?.trim())
+    // Check if ALL rows have translations filled (only for selected target languages)
+    const allFilled = hasRows && rows.every(isRowFilled)
 
     // Check if SELECTED rows have translations filled
     const selectionFilled = hasSelection && rows
         .filter(r => selectedRowIds.has(r.id))
-        .every(r => r.my?.trim() && r.zh?.trim())
+        .every(isRowFilled)
 
     // 'review' or 'approved' counts as translated for button logic
     const allTranslated = hasRows && rows.every(r =>
         (r.status === 'review' || r.status === 'approved') ||
-        (r.my?.trim() && r.zh?.trim())
+        isRowFilled(r)
     )
     const allApproved = hasRows && rows.every(r => r.status === 'approved')
 
@@ -194,16 +202,24 @@ export default function ProjectView({ projectId }) {
     }
 
     const handleExport = () => {
-        const exportData = allRows.map(row => ({
-            'English': row.en,
-            'Bahasa Malaysia': row.my,
-            '中文': row.zh,
-            'Status': row.status,
-        }))
+        // Build export data dynamically based on target languages
+        const exportData = allRows.map(row => {
+            const rowData = { 'English': row.en }
+            // Add only selected target languages
+            targetLanguages.forEach(lang => {
+                const label = LANGUAGES[lang]?.nativeLabel || LANGUAGES[lang]?.label || lang
+                rowData[label] = row[lang] || ''
+            })
+            rowData['Status'] = row.status
+            return rowData
+        })
         const ws = XLSX.utils.json_to_sheet(exportData)
 
-        // Apply grey background to header row (A1, B1, C1, D1)
-        const headerRange = ['A1', 'B1', 'C1', 'D1']
+        // Apply grey background to header row dynamically
+        const numCols = 2 + targetLanguages.length // English + targets + Status
+        const headerRange = Array.from({ length: numCols }, (_, i) =>
+            String.fromCharCode(65 + i) + '1'
+        )
         headerRange.forEach(cell => {
             if (ws[cell]) {
                 ws[cell].s = {
@@ -227,7 +243,6 @@ export default function ProjectView({ projectId }) {
             const parsedData = await parseExcelFile(file)
             for (const [sheetName, sheetData] of Object.entries(parsedData)) {
                 const newRows = sheetData.entries.map((entry, idx) => ({
-                    key: `row_${Date.now()}_${idx}`,
                     en: entry.english || '',
                     my: entry.malay || '',
                     zh: entry.chinese || '',
@@ -253,23 +268,26 @@ export default function ProjectView({ projectId }) {
     // Handle inline row addition
     const handleStartAddRow = () => {
         setIsAddingRow(true)
-        setNewRowData({ en: '', my: '', zh: '' })
+        // Initialize with only en and the project's target languages
+        const initialRow = { en: '' }
+        targetLanguages.forEach(lang => initialRow[lang] = '')
+        setNewRowData(initialRow)
         setTimeout(() => newRowInputRef.current?.focus(), 50)
     }
 
     const findDuplicateRow = (newRow, existingRows) => {
         return existingRows.find(existing => {
+            // Check English (source) for duplicates
             if (newRow.en && existing.en &&
                 newRow.en.toLowerCase().trim() === existing.en.toLowerCase().trim()) {
                 return true
             }
-            if (newRow.my && existing.my &&
-                newRow.my.toLowerCase().trim() === existing.my.toLowerCase().trim()) {
-                return true
-            }
-            if (newRow.zh && existing.zh &&
-                newRow.zh.trim() === existing.zh.trim()) {
-                return true
+            // Check target languages for duplicates
+            for (const lang of targetLanguages) {
+                if (newRow[lang] && existing[lang] &&
+                    newRow[lang].toLowerCase().trim() === existing[lang].toLowerCase().trim()) {
+                    return true
+                }
             }
             return false
         })
@@ -280,14 +298,15 @@ export default function ProjectView({ projectId }) {
             setIsAddingRow(false)
             return
         }
+        // Build row with only valid PocketBase fields
         const newRow = {
-            key: `row_${Date.now()}`,
             en: newRowData.en.trim(),
-            my: newRowData.my.trim(),
-            zh: newRowData.zh.trim(),
             status: 'draft',
             promptId: 'default',
         }
+        targetLanguages.forEach(lang => {
+            newRow[lang] = (newRowData[lang] || '').trim()
+        })
 
         const duplicate = findDuplicateRow(newRow, rows)
         if (duplicate) {
@@ -300,7 +319,9 @@ export default function ProjectView({ projectId }) {
 
     const handleCancelAddRow = () => {
         setIsAddingRow(false)
-        setNewRowData({ en: '', my: '', zh: '' })
+        const initialRow = { en: '' }
+        targetLanguages.forEach(lang => initialRow[lang] = '')
+        setNewRowData(initialRow)
     }
 
     const handleNewRowKeyDown = (e) => {
@@ -489,12 +510,12 @@ export default function ProjectView({ projectId }) {
 
                 console.log(`📝 [Translate] Group "${promptKey}" using template: ${templateToUse.name}`)
 
-                // Call translation API for this group
+                // Call translation API for this group - use project's target languages
                 const results = await translateBatch(
                     groupRows.map(row => ({ id: row.id, en: row.en })),
                     templateToUse,
                     {
-                        targetLanguages: ['my', 'zh'],
+                        targetLanguages: targetLanguages,
                         glossaryTerms: glossaryTerms.map(t => ({
                             english: t.english,
                             malay: t.malay,
@@ -503,14 +524,15 @@ export default function ProjectView({ projectId }) {
                     }
                 )
 
-                // Update rows with translations
+                // Update rows with translations - dynamically handle target languages
                 for (const result of results) {
                     if (result.status !== 'error') {
-                        await updateProjectRow(id, result.id, {
-                            my: result.my,
-                            zh: result.zh,
-                            translatedAt: new Date().toISOString()
+                        // Build update object with only the target languages
+                        const updates = { translatedAt: new Date().toISOString() }
+                        targetLanguages.forEach(lang => {
+                            if (result[lang]) updates[lang] = result[lang]
                         })
+                        await updateProjectRow(id, result.id, updates)
                         totalSuccessCount++
                     }
                 }
@@ -536,8 +558,10 @@ export default function ProjectView({ projectId }) {
 
 
 
-    // Column Definitions - widths aligned with Glossary, scrollable for dynamic languages
-    const columns = [
+    // Column Definitions - dynamic based on project.targetLanguages
+    // Build language columns dynamically
+    const languageColumns = [
+        // English source column (always shown)
         {
             header: "English",
             accessor: "en",
@@ -552,34 +576,25 @@ export default function ProjectView({ projectId }) {
                 />
             )
         },
-        {
-            header: "Bahasa Malaysia",
-            accessor: "my",
-            width: "200px",
-            minWidth: "160px",
+        // Dynamic target language columns
+        ...targetLanguages.map(langCode => ({
+            header: LANGUAGES[langCode]?.label || langCode,
+            accessor: langCode,
+            width: langCode === 'my' ? "200px" : "180px",
+            minWidth: langCode === 'my' ? "160px" : "140px",
             color: 'hsl(220, 9%, 46%)',
             render: row => (
                 <GlossaryHighlighter
-                    text={row.my || '—'}
-                    language="my"
+                    text={row[langCode] || '—'}
+                    language={langCode}
                     glossaryTerms={glossaryTerms}
                 />
             )
-        },
-        {
-            header: "Chinese",
-            accessor: "zh",
-            width: "180px",
-            minWidth: "140px",
-            color: 'hsl(220, 9%, 46%)',
-            render: row => (
-                <GlossaryHighlighter
-                    text={row.zh || '—'}
-                    language="zh"
-                    glossaryTerms={glossaryTerms}
-                />
-            )
-        },
+        }))
+    ]
+
+    const columns = [
+        ...languageColumns,
         {
             header: "Status",
             accessor: "status",
@@ -785,7 +800,7 @@ export default function ProjectView({ projectId }) {
                         </>
                     )}
 
-                    {/* Export - Available when NO selection and ALL FILLED (but NOT allApproved, avoid duplicate) */}
+                    {/* Export - Available when NO selection and ALL FILLED (but NOT all Approved, avoid duplicate) */}
                     {hasRows && !hasSelection && allFilled && !allApproved && (
                         <PillButton
                             variant="outline"
@@ -872,42 +887,27 @@ export default function ProjectView({ projectId }) {
                                 }}
                             />
                         </td>
-                        <td style={{ padding: '8px 16px' }}>
-                            <input
-                                type="text"
-                                placeholder="Bahasa Malaysia (optional)"
-                                value={newRowData.my}
-                                onChange={(e) => setNewRowData(prev => ({ ...prev, my: e.target.value }))}
-                                onKeyDown={handleNewRowKeyDown}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    fontSize: '14px',
-                                    border: '1px solid hsl(220, 13%, 91%)',
-                                    borderRadius: '6px',
-                                    outline: 'none',
-                                    backgroundColor: 'white'
-                                }}
-                            />
-                        </td>
-                        <td style={{ padding: '8px 16px' }}>
-                            <input
-                                type="text"
-                                placeholder="Chinese (optional)"
-                                value={newRowData.zh}
-                                onChange={(e) => setNewRowData(prev => ({ ...prev, zh: e.target.value }))}
-                                onKeyDown={handleNewRowKeyDown}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    fontSize: '14px',
-                                    border: '1px solid hsl(220, 13%, 91%)',
-                                    borderRadius: '6px',
-                                    outline: 'none',
-                                    backgroundColor: 'white'
-                                }}
-                            />
-                        </td>
+                        {/* Dynamic target language inputs based on project settings */}
+                        {targetLanguages.map(langCode => (
+                            <td key={langCode} style={{ padding: '8px 16px' }}>
+                                <input
+                                    type="text"
+                                    placeholder={`${LANGUAGES[langCode]?.label || langCode} (optional)`}
+                                    value={newRowData[langCode] || ''}
+                                    onChange={(e) => setNewRowData(prev => ({ ...prev, [langCode]: e.target.value }))}
+                                    onKeyDown={handleNewRowKeyDown}
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px 12px',
+                                        fontSize: '14px',
+                                        border: '1px solid hsl(220, 13%, 91%)',
+                                        borderRadius: '6px',
+                                        outline: 'none',
+                                        backgroundColor: 'white'
+                                    }}
+                                />
+                            </td>
+                        ))}
                         <td style={{ padding: '12px 16px' }}>
                             <span style={{ fontSize: '12px', color: 'hsl(220, 9%, 46%)' }}>New</span>
                         </td>
@@ -927,7 +927,7 @@ export default function ProjectView({ projectId }) {
                 */}
                 {isAddingRow && (
                     <tr style={{ borderBottom: '1px solid hsl(220, 13%, 91%)', backgroundColor: 'transparent' }}>
-                        <td colSpan={6} style={{ padding: '8px 16px', textAlign: 'right' }}>
+                        <td colSpan={columns.length + 1} style={{ padding: '8px 16px', textAlign: 'right' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', width: '100%' }}>
                                 <button
                                     onClick={handleSaveNewRow}
@@ -965,7 +965,7 @@ export default function ProjectView({ projectId }) {
                 {/* Add new row button - inside table as a row */}
                 {!isAddingRow && (
                     <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
+                        <td colSpan={columns.length + 1} style={{ padding: 0 }}>
                             <button
                                 onClick={handleStartAddRow}
                                 style={{
