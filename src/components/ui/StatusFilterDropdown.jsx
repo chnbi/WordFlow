@@ -10,7 +10,7 @@ const DEFAULT_STATUS_OPTIONS = [
     { id: 'changes', label: 'Need Changes', color: '#ef4444' },
 ]
 
-export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, statusOptions = DEFAULT_STATUS_OPTIONS }) {
+export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, statusOptions = DEFAULT_STATUS_OPTIONS, className, style }) {
     const [isOpen, setIsOpen] = useState(false)
     const dropdownRef = useRef(null)
 
@@ -44,6 +44,7 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
             <PillButton
                 variant="outline"
                 type="button"
+                className={className}
                 onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -56,6 +57,7 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
                     backgroundColor: activeCount > 0 ? 'hsl(340, 82%, 59%, 0.1)' : undefined,
                     borderColor: activeCount > 0 ? '#FF0084' : undefined,
                     color: activeCount > 0 ? '#FF0084' : undefined,
+                    ...style
                 }}
             >
                 <Filter style={{ width: '16px', height: '16px' }} />
@@ -86,29 +88,9 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
             </PillButton>
 
             {isOpen && (
-                <div style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 4px)',
-                    right: 0,
-                    minWidth: '200px',
-                    backgroundColor: 'white',
-                    border: '1px solid hsl(220, 13%, 91%)',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    zIndex: 50,
-                    padding: '8px 0',
-                }}>
+                <div className="absolute top-[calc(100%+4px)] right-0 min-w-[200px] bg-popover border border-border rounded-xl shadow-lg z-50 py-2">
                     {/* Header */}
-                    <div style={{
-                        padding: '8px 16px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'hsl(220, 9%, 46%)',
-                        borderBottom: '1px solid hsl(220, 13%, 91%)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                    }}>
+                    <div className="px-4 py-2 text-xs font-semibold text-muted-foreground border-b border-border flex justify-between items-center">
                         <span>Filter by Status</span>
                         {activeCount > 0 && (
                             <button
@@ -118,13 +100,7 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
                                     e.stopPropagation()
                                     clearAll()
                                 }}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    fontSize: '11px',
-                                    color: '#FF0084',
-                                    cursor: 'pointer',
-                                }}
+                                className="bg-transparent border-none text-[11px] text-[#FF0084] cursor-pointer hover:underline"
                             >
                                 Clear all
                             </button>
@@ -151,14 +127,6 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
 
 // Separate component to avoid stale closure issues
 function StatusOption({ status, isSelected, onToggle }) {
-    const [isHovered, setIsHovered] = useState(false)
-
-    const bgColor = isHovered
-        ? 'hsl(220, 14%, 96%)'
-        : isSelected
-            ? 'hsl(340, 82%, 59%, 0.05)'
-            : 'transparent'
-
     return (
         <button
             type="button"
@@ -167,36 +135,20 @@ function StatusOption({ status, isSelected, onToggle }) {
                 e.stopPropagation()
                 onToggle()
             }}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                width: '100%',
-                padding: '10px 16px',
-                background: bgColor,
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontSize: '14px',
-                color: 'hsl(222, 47%, 11%)',
-                transition: 'background-color 0.1s',
-            }}
+            className={`
+                flex items-center gap-2.5 w-full px-4 py-2.5 border-none cursor-pointer text-left text-sm transition-colors
+                ${isSelected ? 'bg-pink-500/5' : 'bg-transparent'}
+                hover:bg-muted text-foreground
+            `}
         >
             {/* Checkbox */}
-            <div style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '4px',
-                border: isSelected ? 'none' : '1.5px solid hsl(220, 13%, 80%)',
-                backgroundColor: isSelected ? '#FF0084' : 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-            }}>
-                {isSelected && <Check style={{ width: '12px', height: '12px', color: 'white', pointerEvents: 'none' }} />}
+            <div className={`
+                w-4 h-4 rounded border flex items-center justify-center pointer-events-none
+                ${isSelected
+                    ? 'border-transparent bg-[#FF0084]'
+                    : 'border-muted-foreground/30 bg-background group-hover:border-muted-foreground/50'}
+            `}>
+                {isSelected && <Check style={{ width: '12px', height: '12px', color: 'white' }} />}
             </div>
 
             {/* Status dot */}
@@ -209,7 +161,7 @@ function StatusOption({ status, isSelected, onToggle }) {
             }} />
 
             {/* Label */}
-            <span style={{ pointerEvents: 'none' }}>{status.label}</span>
+            <span className="pointer-events-none">{status.label}</span>
         </button>
     )
 }

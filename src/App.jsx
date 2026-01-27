@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, Component } from 'react'
+import { useState, useEffect, useCallback, Component, useMemo } from 'react'
+import { Agentation } from 'agentation'
 import Layout from './components/layout'
 import Dashboard from './pages/dashboard'
 import Glossary from './pages/glossary-library'
@@ -8,11 +9,15 @@ import ProjectView from './pages/project-details'
 import ImageTranslation from './pages/image-translation'
 import Approvals from './pages/approvals'
 import QuickCheck from './pages/quick-check'
+import Submissions from './pages/submissions'
+import UsersPage from './pages/UsersPage'
+import LoginPage from './pages/LoginPage'
 import { createContext, useContext } from 'react'
 import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor, ACTIONS } from './lib/permissions'
 import { ProjectProvider, useProjects } from './context/ProjectContext'
 import { GlossaryProvider } from './context/GlossaryContext'
 import { PromptProvider } from './context/PromptContext'
+import { AuthProvider, useAuth as useProductionAuth } from './hooks/useAuth'
 import { Toaster } from "sonner"
 import { AlertCircle } from "lucide-react"
 import { getUserByEmail } from './api/pocketbase'
@@ -20,7 +25,7 @@ import { getUserByEmail } from './api/pocketbase'
 // ===========================================
 // DEV MODE: Set to true to bypass auth
 // ===========================================
-const DEV_BYPASS_AUTH = true
+const DEV_BYPASS_AUTH = false
 
 // Default dev user (can be overridden by PocketBase lookup)
 const DEFAULT_DEV_USER = {
@@ -74,9 +79,12 @@ class ErrorBoundary extends Component {
     }
 }
 
-// Auth context with role support
+// Auth context with role support (Dev mode only)
 const DevAuthContext = createContext(null)
-export const useAuth = () => useContext(DevAuthContext)
+const useDevAuth = () => useContext(DevAuthContext)
+
+// Export the correct hook based on mode
+export const useAuth = DEV_BYPASS_AUTH ? useDevAuth : useProductionAuth
 
 // Export permissions for use in components
 export { ROLES, ACTIONS, getRoleLabel, getRoleColor }
@@ -119,10 +127,14 @@ function AppWithRouting() {
                 return { component: ImageTranslation, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Translate' }] }
             case 'approvals':
                 return { component: Approvals, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Approvals' }] }
+            case 'submissions':
+                return { component: Submissions, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'My Submissions' }] }
             case 'quick-check':
                 return { component: QuickCheck, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Quick Check' }] }
             case 'settings':
                 return { component: Settings, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings' }] }
+            case 'users':
+                return { component: UsersPage, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings', href: '#settings' }, { label: 'Users' }] }
             default:
                 if (path.startsWith('project/')) {
                     // Split to remove query string (e.g., "xxx?page=yyy" -> "xxx")
@@ -208,22 +220,26 @@ function App() {
         loadDevUserRole()
     }, [loadDevUserRole])
 
-    // Create context value with canDo helper
-    const authContextValue = {
-        user: devUser,
+    // Context value with all auth properties
+    const authContextValue = useMemo(() => ({
+        user: devUser || DEFAULT_DEV_USER,
         role: currentRole,
-        setRole: setCurrentRole,
-        loading,
-        signIn: () => console.log('Sign in clicked (dev mode)'),
-        signOut: () => console.log('Sign out clicked (dev mode)'),
-        canDo: (action) => checkPermission(currentRole, action),
         isManager: currentRole === ROLES.MANAGER,
         isEditor: currentRole === ROLES.EDITOR,
+        canDo: (action) => checkPermission(currentRole, action),
+        setRole: setCurrentRole,
+        signOut: async () => {
+            // In dev mode, just clear role and refresh
+            setCurrentRole(ROLES.EDITOR)
+            // Note: In production, this will be replaced by PocketBase signOut
+        },
+        loading: false, // Dev mode, no loading state
         // Expose permission utilities
         getRoleLabel,
         getRoleColor,
         ROLES,
-    }
+        ACTIONS
+    }), [devUser, currentRole])
 
     if (DEV_BYPASS_AUTH) {
         return (
@@ -234,6 +250,54 @@ function App() {
                             <PromptProvider>
                                 <AppWithRouting />
                                 <Toaster />
+                                <Agentation />
+                                {/* Dev Role Switcher - Fixed position for testing */}
+                                <div style={{
+                                    position: 'fixed',
+                                    bottom: '16px',
+                                    right: '16px',
+                                    zIndex: 9999,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '8px 12px',
+                                    backgroundColor: 'white',
+                                    borderRadius: '9999px',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                    border: '1px solid #e5e7eb',
+                                    fontSize: '12px',
+                                    fontWeight: 500
+                                }}>
+                                    <span style={{ color: '#6b7280' }}>Dev Role:</span>
+                                    <button
+                                        onClick={() => setCurrentRole(ROLES.MANAGER)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            borderRadius: '9999px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            backgroundColor: currentRole === ROLES.MANAGER ? '#FF0084' : '#f3f4f6',
+                                            color: currentRole === ROLES.MANAGER ? 'white' : '#374151',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        Manager
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentRole(ROLES.EDITOR)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            borderRadius: '9999px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            backgroundColor: currentRole === ROLES.EDITOR ? '#3b82f6' : '#f3f4f6',
+                                            color: currentRole === ROLES.EDITOR ? 'white' : '#374151',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        Editor
+                                    </button>
+                                </div>
                             </PromptProvider>
                         </GlossaryProvider>
                     </ProjectProvider>
@@ -243,10 +307,8 @@ function App() {
     }
 
     // Production mode - use real PocketBase auth
-    const { AuthProvider, useAuth: realUseAuth } = require('./hooks/useAuth.jsx')
-
     function AppContent() {
-        const { user, loading } = realUseAuth()
+        const { user, loading } = useAuth()
 
         if (loading) {
             return (
@@ -257,20 +319,8 @@ function App() {
         }
 
         if (!user) {
-            // Redirect to login or show login UI
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950">
-                    <div className="text-center">
-                        <h1 className="text-xl font-bold mb-4">Please Sign In</h1>
-                        <button
-                            onClick={() => realUseAuth().signInWithOAuth('google')}
-                            className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600"
-                        >
-                            Sign in with Google
-                        </button>
-                    </div>
-                </div>
-            )
+            // Show login page
+            return <LoginPage />
         }
 
         return <AppWithRouting />
@@ -284,6 +334,7 @@ function App() {
                         <PromptProvider>
                             <AppContent />
                             <Toaster />
+                            <Agentation />
                         </PromptProvider>
                     </GlossaryProvider>
                 </ProjectProvider>

@@ -19,23 +19,10 @@ export function AuthProvider({ children }) {
         }
 
         try {
-            // Try to find user in our users collection
-            const userData = await getUserByEmail(authUser.email)
-
-            if (userData) {
-                setUserRole(userData.role || ROLES.EDITOR)
-                console.log('✅ [PocketBase] User role loaded:', userData.role)
-            } else {
-                // First-time user - create with default 'editor' role
-                await upsertUser({
-                    email: authUser.email,
-                    name: authUser.name || authUser.username || 'User',
-                    avatar: authUser.avatar || null,
-                    role: ROLES.EDITOR
-                })
-                setUserRole(ROLES.EDITOR)
-                console.log('✅ [PocketBase] New user created with editor role')
-            }
+            // Get role directly from auth user model
+            const role = authUser.role || ROLES.EDITOR
+            setUserRole(role)
+            console.log('✅ [PocketBase] User role loaded:', role)
         } catch (error) {
             console.error('Error loading user role:', error)
             setUserRole(ROLES.EDITOR)
@@ -120,6 +107,8 @@ export function AuthProvider({ children }) {
             setUser(null)
             setUserRole(ROLES.EDITOR)
             console.log('✅ [PocketBase] User signed out')
+            // Reload to show login page
+            window.location.reload()
         } catch (error) {
             console.error('Sign out error:', error)
             throw error

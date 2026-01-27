@@ -46,6 +46,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog"
+import { useAuth } from "@/App"
 
 // WordFlow Logo Component - ChatGPT-style behavior
 // Logo navigates home, shows sidebar icon + "Open sidebar" tooltip when collapsed and hovered
@@ -78,11 +79,11 @@ function WordFlowLogo() {
     </svg>
   )
 
-  // WordFlow Flower Logo
+  // WordFlow Flower Logo - sized to match feature icons
   const FlowerLogo = () => (
     <svg
-      width="32"
-      height="32"
+      width="28"
+      height="28"
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -437,6 +438,7 @@ export function AppSidebar({ ...props }) {
   const { terms: glossaryTerms } = useGlossary()
   const { prompts } = usePrompts()
   const { getNewApprovalCount } = useApprovalNotifications()
+  const { isManager } = useAuth()
   const [settingsOpen, setSettingsOpen] = React.useState(true)
   const [currentHash, setCurrentHash] = React.useState(window.location.hash)
   const [expandedProjectId, setExpandedProjectId] = React.useState(null)
@@ -473,7 +475,14 @@ export function AppSidebar({ ...props }) {
   const handleAddPage = async (projectId) => {
     const pages = getProjectPages(projectId) || []
     const newPageName = `Page ${pages.length + 1}`
-    await addProjectPage(projectId, { name: newPageName })
+    const newPage = await addProjectPage(projectId, { name: newPageName })
+
+    // Redirect to the new page if created successfully
+    if (newPage?.id) {
+      window.location.hash = `#project/${projectId}?page=${newPage.id}`
+      // Also expand the project to show the new page in the list
+      setExpandedProjectId(projectId)
+    }
   }
 
   // Handler: Delete project
@@ -537,14 +546,16 @@ export function AppSidebar({ ...props }) {
   const glossaryNewApprovals = getNewApprovalCount('glossary', 'main', glossaryTerms)
   const projectsInProgress = projects.filter(p => p.status === 'in-progress').length
 
-  // Dynamic nav items with badges
+  // Dynamic nav items with badges (filter by role)
   const navEssentialsWithBadges = [
-    // { title: "Projects", url: "#projects", icon: Folder, badge: projectsInProgress }, // Removed as per request
-    { title: "Approvals", url: "#approvals", icon: Edit3, badge: pendingApprovals > 0 ? pendingApprovals : undefined },
+    // Only show Approvals to Managers
+    ...(isManager ? [{ title: "Approvals", url: "#approvals", icon: Edit3, badge: pendingApprovals > 0 ? pendingApprovals : undefined }] : []),
+    // Only show My Submissions to Editors
+    ...(!isManager ? [{ title: "My Submissions", url: "#submissions", icon: CheckSquare, badge: pendingApprovals > 0 ? pendingApprovals : undefined }] : []),
     { title: "Image Translation", url: "#image-translate", icon: Languages },
     { title: "Quick Check", url: "#quick-check", icon: Sparkles },
     { title: "Glossary", url: "#glossary", icon: BookOpen, badge: glossaryNewApprovals > 0 ? glossaryNewApprovals : undefined },
-    { title: "Prompt Library", url: "#prompt", icon: Library }, // Approved count for Glossary
+    { title: "Prompt Library", url: "#prompt", icon: Library },
   ]
 
   // Dynamic projects list (show up to 5 recent, sorted by lastUpdated)

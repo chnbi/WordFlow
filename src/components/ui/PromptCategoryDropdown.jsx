@@ -36,12 +36,17 @@ function getCategoryStyle(template) {
  * @param {Array} templates - Array of available templates
  * @param {Function} onSelect - Callback when selection changes (promptId) => void
  */
-export function PromptCategoryDropdown({ currentPromptId, templates, onSelect }) {
+export function PromptCategoryDropdown({ currentPromptId, templates, onSelect, style }) {
     const [isOpen, setIsOpen] = useState(false)
     const dropdownRef = useRef(null)
 
+    // Filter to only show published prompts (or default) that can be used
+    const usableTemplates = templates.filter(t =>
+        t.isDefault || t.status === 'published'
+    )
+
     // Sort templates: default first
-    const sortedTemplates = [...templates].sort((a, b) => {
+    const sortedTemplates = [...usableTemplates].sort((a, b) => {
         if (a.isDefault && !b.isDefault) return -1
         if (!a.isDefault && b.isDefault) return 1
         return 0
@@ -76,11 +81,13 @@ export function PromptCategoryDropdown({ currentPromptId, templates, onSelect })
                     borderRadius: '9999px',
                     fontSize: '12px',
                     fontWeight: 500,
-                    backgroundColor: isDefault ? 'hsl(220, 14%, 96%)' : 'hsl(340, 82%, 95%)',
+                    // Slightly darker grey for default to be more visible "grey colour"
+                    backgroundColor: isDefault ? 'hsl(220, 13%, 91%)' : 'hsl(340, 82%, 95%)',
                     color: isDefault ? 'hsl(220, 9%, 46%)' : 'hsl(340, 82%, 45%)',
                     border: 'none',
                     cursor: 'pointer',
-                    transition: 'all 0.15s'
+                    transition: 'all 0.15s',
+                    ...style // Allow overrides (e.g. border)
                 }}
             >
                 {displayName}

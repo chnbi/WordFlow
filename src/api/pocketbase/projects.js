@@ -152,22 +152,47 @@ export async function getPageRows(projectId, pageId) {
 
 export async function addPageRows(projectId, pageId, rows) {
     try {
+        // Log what we're trying to create for debugging
+        console.log('[PocketBase] Creating rows:', {
+            projectId,
+            pageId,
+            rowCount: rows.length,
+            sampleRow: rows[0]
+        })
+
         // Create rows in parallel for better performance
-        const promises = rows.map((row, i) =>
-            pb.collection('project_rows').create({
-                ...row,
+        const promises = rows.map((row, i) => {
+            // Remove id - PocketBase auto-generates it  
+            const { id, ...rowDataWithoutId } = row
+
+            const rowData = {
+                ...rowDataWithoutId,
                 project: projectId,
                 page: pageId,
                 order: i,
                 status: row.status || 'draft'
-            })
-        )
+            }
+
+            console.log('[PocketBase] Row data:', rowData)
+            return pb.collection('project_rows').create(rowData)
+        })
+
         const results = await Promise.all(promises)
         console.log('✅ [PocketBase] Added', rows.length, 'rows to page:', pageId)
         await updateProject(projectId, {})
         return results
     } catch (error) {
         console.error('Error adding rows:', error)
+        console.error('Error details:', {
+            message: error.message,
+            status: error.status,
+            data: error.data,
+            originalData: error.originalData
+        })
+        // Show detailed validation errors
+        if (error.data) {
+            console.error('❌ Validation errors:', JSON.stringify(error.data, null, 2))
+        }
         throw error
     }
 }

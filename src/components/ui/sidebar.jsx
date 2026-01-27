@@ -26,9 +26,9 @@ import {
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
+const SIDEBAR_WIDTH = "13rem"
+const SIDEBAR_WIDTH_MOBILE = "15rem"
+const SIDEBAR_WIDTH_ICON = "3.5rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 const SidebarContext = React.createContext(null)
@@ -433,9 +433,9 @@ const sidebarMenuButtonVariants = cva(
           "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
       },
       size: {
-        default: "h-10 text-sm",
-        sm: "h-8 text-xs",
-        lg: "h-12 text-sm group-data-[collapsible=icon]:!p-0",
+        default: "h-8 text-[13px]",
+        sm: "h-7 text-xs",
+        lg: "h-10 text-[13px] group-data-[collapsible=icon]:!p-0",
       },
     },
     defaultVariants: {
@@ -589,11 +589,11 @@ const SidebarMenuSubButton = React.forwardRef(
         data-size={size}
         data-active={isActive}
         className={cn(
-          "relative flex h-10 min-w-0 items-center gap-2 overflow-hidden rounded-r-full rounded-l-none px-3 text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+          "relative flex h-8 min-w-0 items-center gap-2 overflow-hidden rounded-r-full rounded-l-none px-3 text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
           "hover:bg-sidebar-primary/10 hover:text-sidebar-primary-foreground hover:font-bold",
           "data-[active=true]:bg-sidebar-primary/20 data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-bold",
           size === "sm" && "text-xs",
-          size === "md" && "text-sm",
+          size === "md" && "text-[13px]",
           "group-data-[collapsible=icon]:hidden",
           className
         )}

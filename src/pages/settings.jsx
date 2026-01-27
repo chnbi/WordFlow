@@ -5,43 +5,10 @@ import { useAuth } from "@/App"
 import { useState } from "react"
 import ManageCategoriesDialog from "@/components/dialogs/ManageCategoriesDialog"
 import UserManagementDialog from "@/components/dialogs/UserManagementDialog"
+import ChangePasswordDialog from "@/components/dialogs/ChangePasswordDialog"
 import { toast } from "sonner"
 import { translateBatch } from "@/api/gemini"
-
-const settingsSections = [
-    {
-        id: 'profile',
-        icon: User,
-        title: 'Profile',
-        description: 'Manage your personal information and preferences',
-        color: 'bg-blue-100 dark:bg-blue-900/40',
-        iconColor: 'text-blue-600 dark:text-blue-400',
-    },
-    {
-        id: 'security',
-        icon: Key,
-        title: 'Security',
-        description: 'Password, two-factor authentication, and login activity',
-        color: 'bg-emerald-100 dark:bg-emerald-900/40',
-        iconColor: 'text-emerald-600 dark:text-emerald-400',
-    },
-    {
-        id: 'notifications',
-        icon: Bell,
-        title: 'Notifications',
-        description: 'Email alerts and in-app notification preferences',
-        color: 'bg-amber-100 dark:bg-amber-900/40',
-        iconColor: 'text-amber-600 dark:text-amber-400',
-    },
-    {
-        id: 'appearance',
-        icon: Palette,
-        title: 'Appearance',
-        description: 'Theme, language, and display preferences',
-        color: 'bg-violet-100 dark:bg-violet-900/40',
-        iconColor: 'text-violet-600 dark:text-violet-400',
-    },
-]
+import AuditLogsSection from "@/components/AuditLogsSection"
 
 const adminSections = [
     {
@@ -65,22 +32,45 @@ const adminSections = [
 ]
 
 export default function Settings() {
-    const { isManager, canDo, user } = useAuth()
+    const { canDo, user } = useAuth()
     const [isCategoryOpen, setIsCategoryOpen] = useState(false)
-    const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false)
+    const [isPasswordOpen, setIsPasswordOpen] = useState(false)
 
     return (
         <div className="space-y-6 w-full">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', color: 'hsl(222, 47%, 11%)' }}>Settings</h1>
+                    <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em' }} className="text-foreground">Settings</h1>
                     <p className="text-muted-foreground mt-1">Manage your account and preferences</p>
                 </div>
             </div>
 
-            {/* System Health Check (Manager Feature) */}
-            <div className="rounded-2xl bg-card border shadow-sm p-6 flex items-center justify-between">
+            <div className="space-y-3">
+                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Security</h2>
+                <div className="rounded-2xl bg-card border border-border">
+                    <button
+                        onClick={() => setIsPasswordOpen(true)}
+                        className="w-full flex items-center gap-4 p-5 hover:bg-muted/50 transition-colors text-left"
+                    >
+                        <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                            <Key className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">
+                                Change Password
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-0.5 truncate">
+                                Update your account password
+                            </p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                    </button>
+                </div>
+            </div>
+
+            {/* AI Connection Status */}
+            <div className="rounded-2xl bg-card border border-border shadow-sm p-6 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
                         <Activity className="w-6 h-6 text-violet-600 dark:text-violet-400" />
@@ -115,40 +105,11 @@ export default function Settings() {
                 </Button>
             </div>
 
-            {/* General Settings */}
-            <div className="space-y-3">
-                <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">General</h2>
-                <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                    {settingsSections.map((section) => {
-                        const Icon = section.icon
-                        return (
-                            <button
-                                key={section.id}
-                                className="w-full flex items-center gap-4 p-5 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-colors text-left"
-                            >
-                                <div className={`w-11 h-11 rounded-xl ${section.color} flex items-center justify-center shrink-0`}>
-                                    <Icon className={`w-5 h-5 ${section.iconColor}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                        {section.title}
-                                    </p>
-                                    <p className="text-sm text-zinc-500 mt-0.5 truncate">
-                                        {section.description}
-                                    </p>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-zinc-300 dark:text-zinc-600 shrink-0" />
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
             {/* Admin/Manager Settings */}
-            {canDo('manage_users') && ( // Use string directly or import ACTIONS
+            {canDo('manage_users') && (
                 <div className="space-y-3">
-                    <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">Administration</h2>
-                    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Administration</h2>
+                    <div className="rounded-2xl bg-card border border-border divide-y divide-border">
                         {adminSections.map((section) => {
                             const Icon = section.icon
                             return (
@@ -156,27 +117,32 @@ export default function Settings() {
                                     key={section.id}
                                     onClick={() => {
                                         if (section.action === 'open_categories') setIsCategoryOpen(true)
-                                        if (section.action === 'open_users') setIsUserMgmtOpen(true)
+                                        if (section.action === 'open_users') window.location.hash = 'users'
                                     }}
-                                    className="w-full flex items-center gap-4 p-5 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-colors text-left"
+                                    className="w-full flex items-center gap-4 p-5 hover:bg-muted/50 transition-colors text-left"
                                 >
                                     <div className={`w-11 h-11 rounded-xl ${section.color} flex items-center justify-center shrink-0`}>
                                         <Icon className={`w-5 h-5 ${section.iconColor}`} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                        <p className="text-sm font-medium text-foreground">
                                             {section.title}
                                         </p>
-                                        <p className="text-sm text-zinc-500 mt-0.5 truncate">
+                                        <p className="text-sm text-muted-foreground mt-0.5 truncate">
                                             {section.description}
                                         </p>
                                     </div>
-                                    <ChevronRight className="w-5 h-5 text-zinc-300 dark:text-zinc-600 shrink-0" />
+                                    <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
                                 </button>
                             )
                         })}
                     </div>
                 </div>
+            )}
+
+            {/* Audit Trail - Manager only */}
+            {canDo('manage_users') && (
+                <AuditLogsSection />
             )}
 
             {/* Account Info */}
@@ -191,10 +157,11 @@ export default function Settings() {
                 onOpenChange={setIsCategoryOpen}
             />
 
-            <UserManagementDialog
-                open={isUserMgmtOpen}
-                onOpenChange={setIsUserMgmtOpen}
+            <ChangePasswordDialog
+                open={isPasswordOpen}
+                onOpenChange={setIsPasswordOpen}
             />
+
         </div>
     )
 }

@@ -13,7 +13,7 @@ import * as XLSX from "xlsx"
 import { parseExcelFile } from "@/lib/excel"
 import { translateBatch } from "@/api/gemini/text"
 import { toast } from "sonner"
-import { DataTable } from "@/components/ui/DataTable"
+import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
 import { PromptCategoryDropdown } from "@/components/ui/PromptCategoryDropdown"
 import {
     DropdownMenu,
@@ -23,8 +23,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { getStatusConfig, LANGUAGES } from "@/lib/constants"
-import { ConfirmDialog } from "@/components/dialogs"
+
+import { ConfirmDialog, ProjectSettingsDialog } from "@/components/dialogs"
 import { GlossaryHighlighter } from "@/components/ui/GlossaryHighlighter"
+import Pagination from "@/components/Pagination"
 
 
 export default function ProjectView({ projectId }) {
@@ -57,12 +59,17 @@ export default function ProjectView({ projectId }) {
     const newRowInputRef = useRef(null)
     const [isImporting, setIsImporting] = useState(false)
     const [isTranslating, setIsTranslating] = useState(false)
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState([]) // Multi-selectable status filter
     const [waitTimeout, setWaitTimeout] = useState(false) // Timeout for waiting for project
     const [deleteConfirm, setDeleteConfirm] = useState(null) // { type: 'bulk' | 'single', data: any }
     const [duplicateConfirm, setDuplicateConfirm] = useState(null) // { row: object, duplicate: object }
     const [editingRowId, setEditingRowId] = useState(null) // Row being edited inline
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(25)
 
     // Prompt Selection State
     const [selectedPromptId, setSelectedPromptId] = useState(null)
@@ -135,9 +142,20 @@ export default function ProjectView({ projectId }) {
         return matchesSearch && matchesStatus
     })
 
+    // Pagination: Slice rows for current page
+    const totalRows = rows.length
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedRows = rows.slice(startIndex, endIndex)
+
     const selectedRowIds = getSelectedRowIds(id)
     const selectedCount = selectedRowIds.size
     const hasSelection = selectedCount > 0
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [searchQuery, statusFilter.length, currentPageId])
 
     // targetLanguages is already declared above near project fetch
 
@@ -147,10 +165,13 @@ export default function ProjectView({ projectId }) {
     }
 
     // Helper variables for Action Bar Logic
-    const hasRows = rows.length > 0
+    // hasRows uses ORIGINAL data - for UI elements that should always show (like Filter button)
+    // hasFilteredRows uses filtered data - for action buttons that operate on visible data
+    const hasRows = (allRows || []).length > 0
+    const hasFilteredRows = rows.length > 0
 
-    // Check if ALL rows have translations filled (only for selected target languages)
-    const allFilled = hasRows && rows.every(isRowFilled)
+    // Check if ALL filtered rows have translations filled (only for selected target languages)
+    const allFilled = hasFilteredRows && rows.every(isRowFilled)
 
     // Check if SELECTED rows have translations filled
     const selectionFilled = hasSelection && rows
@@ -158,11 +179,11 @@ export default function ProjectView({ projectId }) {
         .every(isRowFilled)
 
     // 'review' or 'approved' counts as translated for button logic
-    const allTranslated = hasRows && rows.every(r =>
+    const allTranslated = hasFilteredRows && rows.every(r =>
         (r.status === 'review' || r.status === 'approved') ||
         isRowFilled(r)
     )
-    const allApproved = hasRows && rows.every(r => r.status === 'approved')
+    const allApproved = hasFilteredRows && rows.every(r => r.status === 'approved')
 
     // Show loading state while Firestore data is being fetched
     const projectIdValid = id && id.length > 10
@@ -567,7 +588,7 @@ export default function ProjectView({ projectId }) {
             accessor: "en",
             width: "220px",
             minWidth: "180px",
-            color: 'hsl(222, 47%, 11%)',
+            color: 'hsl(220, 9%, 46%)',
             render: row => (
                 <GlossaryHighlighter
                     text={row.en}
@@ -593,12 +614,19 @@ export default function ProjectView({ projectId }) {
         }))
     ]
 
+    // Check if any row has remarks to decide whether to show the column
+    // Use all rows (not filtered) to keep column structure stable
+    const hasRemarks = rows.some(row => {
+        const remarkText = row.remarks || row.remark || ''
+        return String(remarkText).trim().length > 0
+    })
+
     const columns = [
         ...languageColumns,
         {
             header: "Status",
             accessor: "status",
-            width: "100px",
+            width: "140px", // Increased to prevent wrapping
             render: (row) => {
                 const config = getStatusConfig(row.status)
                 return (
@@ -616,8 +644,34 @@ export default function ProjectView({ projectId }) {
                 )
             }
         },
+        // Remarks column - always present for stability
         {
-            header: "Prompt Category",
+            header: "Remarks",
+            accessor: "remarks",
+            width: "200px",
+            minWidth: "150px",
+            render: (row) => {
+                // Safely convert to string
+                const remarkText = row.remarks ? String(row.remarks) : ''
+                if (!remarkText.trim()) return <span style={{ color: 'hsl(220, 13%, 91%)' }}>—</span>
+
+                return (
+                    <div style={{
+                        fontSize: '13px',
+                        color: row.status === 'changes' ? 'hsl(0, 84%, 60%)' : 'hsl(220, 9%, 46%)',
+                        fontStyle: 'italic',
+                        maxWidth: '200px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                    }} title={remarkText}>
+                        {remarkText}
+                    </div>
+                )
+            }
+        },
+        {
+            header: "Template",
             accessor: "promptId",
             width: "120px",
             render: (row) => (
@@ -694,8 +748,8 @@ export default function ProjectView({ projectId }) {
             />
 
             {/* Page Title */}
-            <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '4px', color: 'hsl(222, 47%, 11%)' }}>
-                {pages.length > 1 && currentPageId
+            <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'hsl(220, 9%, 46%)' }}>
+                {currentPageId
                     ? pages.find(p => p.id === currentPageId)?.name || project.name
                     : project.name
                 }
@@ -715,6 +769,7 @@ export default function ProjectView({ projectId }) {
                             placeholder="Search"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
+                            className="bg-background dark:bg-muted text-foreground"
                             style={{
                                 borderRadius: '12px',
                                 height: '32px',
@@ -722,9 +777,10 @@ export default function ProjectView({ projectId }) {
                                 fontSize: '14px',
                                 padding: '0 12px 0 32px',
                                 border: '1px solid hsl(220, 13%, 91%)',
-                                outline: 'none',
-                                backgroundColor: 'white'
+                                outline: 'none'
+                                // backgroundColor removed to let className handle it
                             }}
+
                         />
                         <Search style={{
                             position: 'absolute',
@@ -744,6 +800,7 @@ export default function ProjectView({ projectId }) {
                                 currentPromptId={selectedPromptId}
                                 templates={templates.filter(t => t.status !== 'draft')}
                                 onSelect={setSelectedPromptId}
+                                style={{ border: '1px solid hsl(220, 13%, 91%)' }}
                             />
                             <StatusFilterDropdown
                                 currentFilter={statusFilter}
@@ -767,6 +824,13 @@ export default function ProjectView({ projectId }) {
                         </PillButton>
                     )}
 
+                    <TableActionButton
+                        icon={FileSpreadsheet}
+                        label="Settings"
+                        onClick={() => setIsSettingsOpen(true)}
+                    />
+
+                    {/* Translate Selected (if not approved/filled?) - Keeping existing logic "Translate {N}" */}
                     {/* Selection Actions */}
                     {hasSelection && (
                         <>
@@ -801,7 +865,7 @@ export default function ProjectView({ projectId }) {
                     )}
 
                     {/* Export - Available when NO selection and ALL FILLED (but NOT all Approved, avoid duplicate) */}
-                    {hasRows && !hasSelection && allFilled && !allApproved && (
+                    {hasFilteredRows && !hasSelection && allFilled && !allApproved && (
                         <PillButton
                             variant="outline"
                             style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
@@ -812,7 +876,7 @@ export default function ProjectView({ projectId }) {
                     )}
 
                     {/* Check if we need Translate button (No Selection, Not all translated) */}
-                    {hasRows && !hasSelection && !allFilled && (
+                    {hasFilteredRows && !hasSelection && !allFilled && (
                         <PrimaryButton
                             style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium, marginLeft: '8px' }}
                             onClick={handleTranslateAll}
@@ -827,7 +891,7 @@ export default function ProjectView({ projectId }) {
                     )}
 
                     {/* Send for Review (No Selection) - if translated but not approved */}
-                    {hasRows && !hasSelection && allTranslated && !allApproved && (
+                    {hasFilteredRows && !hasSelection && allTranslated && !allApproved && (
                         <PrimaryButton
                             style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
                             onClick={handleSendForReview}
@@ -864,9 +928,9 @@ export default function ProjectView({ projectId }) {
             >
                 {/* Inline Add Row */}
                 {isAddingRow && (
-                    <tr style={{ borderBottom: '1px solid hsl(220, 13%, 91%)', backgroundColor: 'hsl(340, 82%, 59%, 0.03)' }}>
-                        <td style={{ width: '52px', padding: '14px 16px' }}>
-                            <Plus style={{ width: '16px', height: '16px', color: '#FF0084' }} />
+                    <tr style={{ borderBottom: `1px solid ${TABLE_STYLES.borderColor}`, backgroundColor: 'hsl(340, 82%, 59%, 0.03)' }}>
+                        <td style={{ width: TABLE_STYLES.checkboxColumnWidth, padding: TABLE_STYLES.headerPadding }}>
+                            <Plus style={{ width: '16px', height: '16px', color: TABLE_STYLES.primaryColor }} />
                         </td>
                         <td style={{ padding: '8px 16px' }}>
                             <input
@@ -908,10 +972,10 @@ export default function ProjectView({ projectId }) {
                                 />
                             </td>
                         ))}
-                        <td style={{ padding: '12px 16px' }}>
-                            <span style={{ fontSize: '12px', color: 'hsl(220, 9%, 46%)' }}>New</span>
+                        <td style={{ padding: TABLE_STYLES.cellPadding }}>
+                            <span style={{ fontSize: '12px', color: TABLE_STYLES.mutedColor }}>New</span>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: TABLE_STYLES.cellPadding }}>
                             <span style={{ fontSize: '12px', color: 'hsl(220, 9%, 46%)' }}>—</span>
                         </td>
                     </tr>
@@ -922,11 +986,11 @@ export default function ProjectView({ projectId }) {
                     The previous design put Save/Cancel in the last column. 
                     The DataTable has 6 columns (Checkbox + 5 data). 
                     My inputs above cover 4 columns (Checkbox, En, My, Zh). 
-                    Status and Prompt Category are cols 5 and 6. 
+                    Status and Template are cols 5 and 6. 
                     I should add cells for them to align.
                 */}
                 {isAddingRow && (
-                    <tr style={{ borderBottom: '1px solid hsl(220, 13%, 91%)', backgroundColor: 'transparent' }}>
+                    <tr style={{ borderBottom: `1px solid ${TABLE_STYLES.borderColor}`, backgroundColor: 'transparent' }}>
                         <td colSpan={columns.length + 1} style={{ padding: '8px 16px', textAlign: 'right' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', width: '100%' }}>
                                 <button
@@ -972,7 +1036,7 @@ export default function ProjectView({ projectId }) {
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '8px',
-                                    padding: '14px 16px',
+                                    padding: TABLE_STYLES.headerPadding,
                                     width: '100%',
                                     fontSize: '14px',
                                     color: 'hsl(220, 9%, 46%)',
@@ -988,6 +1052,24 @@ export default function ProjectView({ projectId }) {
                     </tr>
                 )}
             </DataTable>
+
+            {/* Project Settings Dialog */}
+            <ProjectSettingsDialog
+                open={isSettingsOpen}
+                onOpenChange={setIsSettingsOpen}
+                project={project}
+            />
+
+            {/* Pagination */}
+            {totalRows > 0 && (
+                <Pagination
+                    currentPage={currentPage}
+                    totalItems={totalRows}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={setItemsPerPage}
+                />
+            )}
 
             {/* Delete Confirmation Dialog */}
             {/* Delete Confirmation Dialog */}

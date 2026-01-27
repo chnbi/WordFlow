@@ -28,7 +28,7 @@ const iconMap = {
 // Top Bar component matching SnowUI Figma
 function TopBar({ breadcrumbs }) {
     const { toggleSidebar } = useSidebar()
-    const { role, setRole, user } = useAuth()
+    const { role, setRole, user, signOut } = useAuth()
     const [isDark, setIsDark] = useState(false)
 
     // Theme toggle
@@ -40,44 +40,35 @@ function TopBar({ breadcrumbs }) {
         }
     }, [isDark])
 
+    const handleLogout = async () => {
+        if (signOut) {
+            await signOut()
+            window.location.reload()
+        }
+    }
+
     return (
-        <header style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            height: '56px',
-            padding: '0 24px',
-            borderBottom: '1px solid hsl(220, 13%, 91%)',
-            backgroundColor: 'white'
-        }}>
+        <header className="sticky top-0 z-10 flex items-center justify-between h-14 px-6 border-b border-border bg-background">
             {/* Left: Breadcrumbs */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="flex items-center gap-3">
                 {/* Breadcrumbs */}
-                <nav style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <nav className="flex items-center gap-2">
                     {breadcrumbs.map((crumb, index) => {
                         const isLast = index === breadcrumbs.length - 1
                         return (
-                            <span key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span key={index} className="flex items-center gap-2">
                                 {index > 0 && (
-                                    <span style={{ color: 'hsl(220, 9%, 46%)', fontSize: '14px' }}>/</span>
+                                    <span className="text-muted-foreground text-sm">/</span>
                                 )}
                                 {crumb.href ? (
                                     <a
                                         href={crumb.href}
-                                        style={{
-                                            fontSize: '14px',
-                                            color: 'hsl(220, 9%, 46%)',
-                                            textDecoration: 'none'
-                                        }}
+                                        className="text-sm text-muted-foreground hover:text-foreground no-underline"
                                     >
                                         {crumb.label}
                                     </a>
                                 ) : (
-                                    <span style={{
-                                        fontSize: '14px',
-                                        color: isLast ? 'hsl(222, 47%, 11%)' : 'hsl(220, 9%, 46%)',
-                                        fontWeight: isLast ? 500 : 400
-                                    }}>
+                                    <span className={`text-sm ${isLast ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                                         {crumb.label}
                                     </span>
                                 )}
@@ -174,22 +165,30 @@ function TopBar({ breadcrumbs }) {
                             )}
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                            Role: {getRoleLabel(role)}
-                        </div>
-                        {Object.values(ROLES).map((r) => (
-                            <DropdownMenuItem
-                                key={r}
-                                onClick={() => setRole(r)}
-                                className={role === r ? 'bg-accent' : ''}
-                            >
-                                <Badge className={`${getRoleColor(r)} mr-2`}>
-                                    {getRoleLabel(r)}
+                    <DropdownMenuContent align="end" className="w-56">
+                        {/* User Info Header */}
+                        <div className="px-2 py-1.5 border-b border-border">
+                            <p className="text-sm font-medium text-foreground">
+                                {user?.name || user?.email || 'User'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                {user?.email || ''}
+                            </p>
+                            <div className="mt-1">
+                                <Badge className={`${getRoleColor(role)} text-xs`}>
+                                    {getRoleLabel(role)}
                                 </Badge>
-                                {r === role && '✓'}
-                            </DropdownMenuItem>
-                        ))}
+                            </div>
+                        </div>
+
+                        {/* Logout Button */}
+                        <DropdownMenuItem
+                            onClick={handleLogout}
+                            className="text-destructive focus:text-destructive cursor-pointer"
+                        >
+                            <User className="mr-2 h-4 w-4" />
+                            Log out
+                        </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

@@ -155,9 +155,6 @@ export default function ImageTranslation() {
             {/* Header */}
             <div>
                 <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', color: 'hsl(222, 47%, 11%)' }}>Image Translation</h1>
-                <p className="text-muted-foreground mt-1">
-                    Upload images, extract text with AI OCR, and translate.
-                </p>
                 {!apiAvailable && (
                     <div className="mt-2 flex items-center gap-2 text-red-600 text-sm">
                         <AlertCircle className="w-4 h-4" />

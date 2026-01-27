@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react"
-import { Upload, FileSpreadsheet, Check, Loader2 } from "lucide-react"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { Upload, FileSpreadsheet, Check, Loader2, X, Plus, AlertCircle, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -11,202 +11,284 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { parseExcelFile } from "@/lib/excel"
+import { cn } from "@/lib/utils"
 
 export default function ImportGlossaryDialog({ open, onOpenChange, onImport }) {
-    const [file, setFile] = useState(null)
-    const [sheets, setSheets] = useState([]) // { name, rowCount, entries[] }
-    const [selectedSheet, setSelectedSheet] = useState(null)
+    // files: { id, name, sheetName, rows: [], headers: [] }
+    const [files, setFiles] = useState([])
     const [isLoading, setIsLoading] = useState(false)
-    const [step, setStep] = useState(1) // 1 = upload, 2 = select sheet
     const [isDragging, setIsDragging] = useState(false)
+    const [mapping, setMapping] = useState({ en: '', my: '', cn: '' })
+    const fileInputRef = useRef(null)
+
+    // Reset when opening
+    useEffect(() => {
+        if (open) {
+            setFiles([])
+            setMapping({ en: '', my: '', cn: '' })
+        }
+    }, [open])
 
     const processFile = useCallback(async (selectedFile) => {
         if (!selectedFile) return
 
         setIsLoading(true)
-        setFile(selectedFile)
-
         try {
             const parsed = await parseExcelFile(selectedFile)
 
-            // Convert to sheet info for UI
-            const sheetInfo = Object.entries(parsed).map(([name, data]) => ({
-                name,
-                rowCount: data.entries?.length || 0,
-                entries: data.entries || []
-            }))
+            // Find first sheet with data
+            const sheetEntry = Object.entries(parsed).find(([_, data]) => data.entries && data.entries.length > 0)
 
-            setSheets(sheetInfo)
-            // Auto-select first sheet with data
-            const firstValidSheet = sheetInfo.find(s => s.rowCount > 0)
-            if (firstValidSheet) {
-                setSelectedSheet(firstValidSheet.name)
+            if (!sheetEntry) {
+                console.warn(`No data found in ${selectedFile.name}`)
+                setIsLoading(false)
+                return
             }
-            setStep(2)
+
+            const [sheetName, data] = sheetEntry
+            const rawEntries = data.entries || []
+
+            if (rawEntries.length === 0) {
+                setIsLoading(false)
+                return
+            }
+
+            // Extract headers from first row keys
+            const headers = Object.keys(rawEntries[0]).filter(k => k !== '__rowNum__')
+
+            const newFile = {
+                id: Math.random().toString(36).substr(2, 9),
+                name: selectedFile.name,
+                sheetName,
+                rows: rawEntries,
+                headers,
+                count: rawEntries.length
+            }
+
+            setFiles(prev => {
+                const next = [...prev, newFile]
+                // If this is the first file, verify default mapping matches
+                if (prev.length === 0) {
+                    autoMapColumns(headers)
+                }
+                return next
+            })
+
         } catch (error) {
-            console.error("Error reading Excel file:", error)
+            console.error("Error reading file:", error)
         } finally {
             setIsLoading(false)
         }
     }, [])
 
+    const autoMapColumns = (headers) => {
+        const lowerHeaders = headers.map(h => h.toLowerCase())
+        const newMap = { en: '', my: '', cn: '' }
+
+        // Helper to find header
+        const find = (keywords) => headers.find(h => keywords.includes(h.toLowerCase().trim())) || ''
+
+        newMap.en = find(['english', 'en', 'term', 'source', 'source text', 'en-us'])
+        newMap.my = find(['bahasa malaysia', 'malay', 'bahasa', 'my', 'bm', 'ms', 'ms-my'])
+        newMap.cn = find(['chinese', 'simplified chinese', 'zh', 'cn', 'zh-cn', 'zh-hans'])
+
+        setMapping(prev => ({ ...prev, ...newMap }))
+    }
+
     const handleFileChange = (e) => {
-        processFile(e.target.files?.[0])
-    }
-
-    const handleDragOver = (e) => {
-        e.preventDefault()
-        setIsDragging(true)
-    }
-
-    const handleDragLeave = (e) => {
-        e.preventDefault()
-        setIsDragging(false)
-    }
-
-    const handleDrop = (e) => {
-        e.preventDefault()
-        setIsDragging(false)
-
-        const droppedFile = e.dataTransfer.files?.[0]
-        if (droppedFile && (droppedFile.name.endsWith('.xlsx') || droppedFile.name.endsWith('.xls'))) {
-            processFile(droppedFile)
+        if (e.target.files?.[0]) {
+            processFile(e.target.files[0])
+            // Reset input so same file can be selected again if needed
+            e.target.value = ''
         }
     }
 
+    const handleRemoveFile = (id) => {
+        setFiles(prev => prev.filter(f => f.id !== id))
+    }
+
     const handleImport = () => {
-        if (!selectedSheet) return
+        // Validation
+        if (!mapping.en) {
+            // Show error or shake
+            return
+        }
 
-        const sheetData = sheets.find(s => s.name === selectedSheet)
-        if (!sheetData) return
+        // Aggregate all terms
+        const allTerms = files.flatMap(file => {
+            return file.rows.map(row => ({
+                en: row[mapping.en] || '',
+                my: row[mapping.my] || '',
+                cn: row[mapping.cn] || '',
+                category: row['category'] || row['Category'] || 'General',
+                remark: row['remark'] || row['Remark'] || '',
+                status: 'draft' // Default imported status
+            })).filter(t => t.en) // Filter empty English
+        })
 
-        // Map entries to PocketBase glossary_terms format
-        // Schema uses: en, my, cn (not english, malay, chinese)
-        const terms = (sheetData.entries || []).map(entry => ({
-            en: entry.english || entry.term || entry.en || '',
-            my: entry.malay || entry.my || '',
-            cn: entry.chinese || entry.cn || '',
-            category: entry.category || 'General',
-            remark: entry.remark || '',
-            status: 'draft'
-        })).filter(t => t.en) // Only include valid terms with English text
-
-        onImport(terms)
+        onImport(allTerms)
         handleClose()
     }
 
     const handleClose = () => {
-        setFile(null)
-        setSheets([])
-        setSelectedSheet(null)
-        setStep(1)
-        setIsDragging(false)
+        setFiles([])
         onOpenChange(false)
     }
 
-    const selectedRowCount = sheets.find(s => s.name === selectedSheet)?.rowCount || 0
+    const totalRows = files.reduce((acc, f) => acc + f.count, 0)
+
+    // Get aggregated headers for mapping (union of all file headers? or just use first file?)
+    // Simplification: Use headers from the first file for mapping setup
+    // Ideally we should warn if subsequent files don't match, but for now we assume similar structure
+    const displayHeaders = files.length > 0 ? files[0].headers : []
+
+    const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true) }
+    const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false) }
+    const handleDrop = (e) => {
+        e.preventDefault()
+        setIsDragging(false)
+        const droppedFile = e.dataTransfer.files?.[0]
+        if (droppedFile) processFile(droppedFile)
+    }
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Import Glossary Terms</DialogTitle>
                     <DialogDescription>
-                        {step === 1
-                            ? "Upload an Excel file to bulk add terms."
-                            : "Select the sheet containing your terms."
-                        }
+                        Upload one or more Excel files. Data will be combined.
                     </DialogDescription>
                 </DialogHeader>
 
-                {step === 1 && (
-                    <div className="py-6">
-                        <label
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDrop}
-                            className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-200 ${isDragging
-                                ? "border-primary bg-primary/10 scale-[1.02]"
-                                : "border-muted hover:border-primary/50 hover:bg-primary/5"
-                                }`}
-                        >
-                            {isLoading ? (
-                                <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                            ) : (
-                                <>
-                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors ${isDragging ? "bg-primary/20" : "bg-primary/10"
-                                        }`}>
-                                        <Upload className={`w-7 h-7 text-primary transition-transform ${isDragging ? "scale-110" : ""}`} />
-                                    </div>
-                                    <p className="font-medium text-foreground">
-                                        {isDragging ? "Drop to upload" : "Drop your file here"}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
-                                    <p className="text-xs text-muted-foreground mt-3">Supports .xlsx and .xls</p>
-                                </>
-                            )}
-                            <input
-                                type="file"
-                                accept=".xlsx,.xls"
-                                onChange={handleFileChange}
-                                className="hidden"
-                            />
-                        </label>
-                    </div>
-                )}
+                <div className="space-y-6 py-4">
+                    {/* Area 1: Files List & Upload */}
+                    <div className="space-y-3">
+                        <Label>Files</Label>
 
-                {step === 2 && (
-                    <div className="py-4 space-y-5">
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Select Sheet</Label>
-                            </div>
-                            <div className="border rounded-xl divide-y max-h-60 overflow-auto">
-                                {sheets.map(sheet => {
-                                    const isSelected = selectedSheet === sheet.name
-                                    const hasRows = sheet.rowCount > 0
-                                    return (
-                                        <button
-                                            key={sheet.name}
-                                            onClick={() => setSelectedSheet(sheet.name)}
-                                            disabled={!hasRows}
-                                            className={`w-full flex items-center justify-between p-3 text-left transition-colors ${!hasRows ? "opacity-50 cursor-not-allowed" :
-                                                isSelected ? "bg-primary/5" : "hover:bg-muted/50"
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected
-                                                    ? "bg-primary border-primary text-primary-foreground"
-                                                    : "border-muted-foreground/30"
-                                                    }`}>
-                                                    {isSelected && <Check className="w-3 h-3" />}
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
-                                                    <span className="font-medium text-sm">{sheet.name}</span>
-                                                </div>
+                        {files.length > 0 ? (
+                            <div className="space-y-2">
+                                {files.map(file => (
+                                    <div key={file.id} className="flex items-center justify-between p-3 border rounded-xl bg-muted/30">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600">
+                                                <FileSpreadsheet className="w-4 h-4" />
                                             </div>
-                                            <span className={`text-xs ${hasRows ? 'text-muted-foreground' : 'text-destructive'}`}>
-                                                {hasRows ? `${sheet.rowCount} rows` : 'No data found'}
-                                            </span>
-                                        </button>
-                                    )
-                                })}
+                                            <div>
+                                                <p className="text-sm font-medium">{file.name}</p>
+                                                <p className="text-xs text-muted-foreground">{file.sheetName} • {file.count} terms</p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleRemoveFile(file.id)}
+                                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+
+                                <Button
+                                    variant="outline"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full border-dashed"
+                                >
+                                    <Plus className="w-4 h-4 mr-2" /> Add another file
+                                </Button>
+                            </div>
+                        ) : (
+                            <label
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                                className={cn(
+                                    "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors bg-muted/10",
+                                    isDragging ? "border-primary bg-primary/5" : "border-border hover:bg-muted/20"
+                                )}
+                            >
+                                {isLoading ? (
+                                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                                ) : (
+                                    <>
+                                        <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                                        <span className="text-xs text-muted-foreground font-medium">Click to upload or drag file</span>
+                                    </>
+                                )}
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    onChange={handleFileChange}
+                                    className="hidden"
+                                />
+                            </label>
+                        )}
+                    </div>
+
+                    {/* Area 2: Column Mapping (Only if files exist) */}
+                    {files.length > 0 && (
+                        <div className="space-y-3 pt-2 border-t">
+                            <Label>Map Columns</Label>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">English (Required)</label>
+                                    <select
+                                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        value={mapping.en}
+                                        onChange={(e) => setMapping(prev => ({ ...prev, en: e.target.value }))}
+                                    >
+                                        <option value="">Select column...</option>
+                                        {displayHeaders.map(h => (
+                                            <option key={h} value={h}>{h}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Bahasa Malaysia</label>
+                                    <select
+                                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        value={mapping.my}
+                                        onChange={(e) => setMapping(prev => ({ ...prev, my: e.target.value }))}
+                                    >
+                                        <option value="">Select column...</option>
+                                        {displayHeaders.map(h => (
+                                            <option key={h} value={h}>{h}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Chinese</label>
+                                    <select
+                                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        value={mapping.cn}
+                                        onChange={(e) => setMapping(prev => ({ ...prev, cn: e.target.value }))}
+                                    >
+                                        <option value="">Select column...</option>
+                                        {displayHeaders.map(h => (
+                                            <option key={h} value={h}>{h}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 <DialogFooter>
                     <Button variant="outline" onClick={handleClose}>Cancel</Button>
-                    {step === 2 && (
-                        <Button
-                            onClick={handleImport}
-                            disabled={!selectedSheet || selectedRowCount === 0}
-                        >
-                            Import {selectedRowCount} Terms
-                        </Button>
-                    )}
+                    <Button
+                        onClick={handleImport}
+                        disabled={files.length === 0 || !mapping.en}
+                        className="min-w-[140px]"
+                    >
+                        {isLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            `Import ${totalRows} Terms`
+                        )}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

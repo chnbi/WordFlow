@@ -9,6 +9,7 @@ import { COLORS, PrimaryButton, SecondaryButton, PillButton, IconButton } from "
 import { PageHeader, CategoryFilterTabs, SearchInput } from "@/components/ui/common"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { getStatusConfig } from "@/lib/constants"
+import { toast } from "sonner"
 
 // Using centralized STATUS_CONFIG from @/lib/constants
 
@@ -29,6 +30,9 @@ export default function PromptLibrary() {
         { id: 'review', label: 'In Review', color: '#3b82f6' },
         { id: 'published', label: 'Published', color: '#10b981' },
     ]
+
+    // Check if there are any custom prompts (non-default)
+    const hasCustomPrompts = templates.some(t => !t.isDefault)
 
     // Get unique categories from templates (using tags)
     const allCategories = ['All', ...new Set(
@@ -230,7 +234,8 @@ export default function PromptLibrary() {
 
 
                     {/* New Template Button */}
-                    {canDo(ACTIONS.CREATE_PROMPT) && (
+                    {/* Create Button - Managers Only */}
+                    {canDo(ACTIONS.MANAGE_PROMPTS) && (
                         <PrimaryButton onClick={handleCreate} style={{ height: '36px', fontSize: '14px' }}>
                             <CirclePlus style={{ width: '14px', height: '14px' }} />
                             New template
@@ -360,7 +365,7 @@ export default function PromptLibrary() {
                                                 <Copy className="w-4 h-4" />
                                                 Copy
                                             </button>
-                                            {canDo(ACTIONS.EDIT_PROMPT) && (
+                                            {canDo(ACTIONS.MANAGE_PROMPTS) && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation()
@@ -372,7 +377,7 @@ export default function PromptLibrary() {
                                                     Edit
                                                 </button>
                                             )}
-                                            {canDo(ACTIONS.DELETE_PROMPT) && !isDefault && (
+                                            {canDo(ACTIONS.MANAGE_PROMPTS) && !isDefault && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation()
@@ -515,6 +520,6 @@ export default function PromptLibrary() {
                 confirmLabel="Delete"
                 variant="destructive"
             />
-        </div>
+        </div >
     )
 }

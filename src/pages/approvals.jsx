@@ -1,61 +1,94 @@
 
 // Approvals - Review pending translations (Project-page style UI)
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Search, Check, X } from "lucide-react"
 import { useProjects } from "@/context/ProjectContext"
 import { useGlossary } from "@/context/GlossaryContext"
 import { COLORS, PrimaryButton } from "@/components/ui/shared"
 import { DataTable } from "@/components/ui/DataTable"
+import Pagination from "@/components/Pagination"
 import { toast } from "sonner"
+import { useAuth } from "@/App"
 
 export default function Approvals() {
+    const { isManager } = useAuth()
     const { projects, getProjectPages, getPageRows, getProjectRows, updateProjectRow, recomputeProjectStats } = useProjects()
     const { terms: glossaryTerms, updateTerm: updateGlossaryTerm } = useGlossary()
     const [searchQuery, setSearchQuery] = useState("")
     const [activeTab, setActiveTab] = useState("projects") // "projects" or "glossary"
     const [selectedIds, setSelectedIds] = useState([])
     const [localApprovals, setLocalApprovals] = useState({}) // Track local approval state before save
+    const [localRemarks, setLocalRemarks] = useState({}) // Track remarks/comments for each row
     const [projectReviewRows, setProjectReviewRows] = useState([])
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(25)
+
+    // Redirect Editors to Home
+    useEffect(() => {
+        if (!isManager) {
+            window.location.hash = '#'
+        }
+    }, [isManager])
+
+    // Show nothing while redirecting
+    if (!isManager) {
+        return null
+    }
 
     // Load project review rows from all pages AND legacy project rows
     useEffect(() => {
         const loadProjectReviewRows = async () => {
             const allReviewRows = []
+            console.log('🔄 [Approvals] Loading. Projects:', projects.length)
 
             for (const project of projects) {
                 const pages = getProjectPages(project.id) || []
+                console.log(`Project ${project.id}: ${pages.length} pages`)
 
                 if (pages.length > 0) {
-                    // Project has pages - check page rows
                     for (const page of pages) {
                         const rows = getPageRows(project.id, page.id) || []
-                        const reviewRows = rows
-                            .filter(row => row.status === 'review')
-                            .map(row => ({
-                                ...row,
-                                projectId: project.id,
-                                projectName: project.name,
-                                pageId: page.id,
-                                pageName: page.name || 'Sheet 1'
-                            }))
-                        allReviewRows.push(...reviewRows)
-                    }
-                } else {
-                    // Legacy project without pages - check flat project rows
-                    const legacyRows = getProjectRows(project.id) || []
-                    const reviewRows = legacyRows
-                        .filter(row => row.status === 'review')
-                        .map(row => ({
+                        const reviewRows = rows.filter(row => row.status === 'review')
+
+                        const statusCounts = rows.reduce((acc, row) => {
+                            acc[row.status || 'undefined'] = (acc[row.status || 'undefined'] || 0) + 1
+                            return acc
+                        }, {})
+                        console.log(`  Page ${page.name} (${page.id}): ${rows.length} rows. Statuses:`, statusCounts)
+
+                        const reviewRowsMapped = reviewRows.map(row => ({
                             ...row,
                             projectId: project.id,
                             projectName: project.name,
-                            pageId: null,
-                            pageName: '—'
+                            pageId: page.id,
+                            pageName: page.name || 'Sheet 1'
                         }))
-                    allReviewRows.push(...reviewRows)
+                        allReviewRows.push(...reviewRowsMapped)
+                    }
+                } else {
+                    const legacyRows = getProjectRows(project.id) || []
+                    const reviewRows = legacyRows.filter(row => row.status === 'review')
+
+                    const statusCounts = legacyRows.reduce((acc, row) => {
+                        acc[row.status || 'undefined'] = (acc[row.status || 'undefined'] || 0) + 1
+                        return acc
+                    }, {})
+                    console.log(`  Legacy Project: ${legacyRows.length} rows. Statuses:`, statusCounts)
+
+                    const reviewRowsMapped = reviewRows.map(row => ({
+                        ...row,
+                        projectId: project.id,
+                        projectName: project.name,
+                        pageId: null,
+                        pageName: '—'
+                    }))
+                    allReviewRows.push(...reviewRowsMapped)
                 }
             }
 
+            console.log('✅ [Approvals] Total review rows:', allReviewRows.length)
             setProjectReviewRows(allReviewRows)
         }
 
@@ -71,23 +104,41 @@ export default function Approvals() {
             pageName: '—'
         }))
 
+    // Debug: Log glossary terms status distribution
+    const glossaryStatusCounts = glossaryTerms.reduce((acc, term) => {
+        acc[term.status || 'undefined'] = (acc[term.status || 'undefined'] || 0) + 1
+        return acc
+    }, {})
+    console.log('📦 [Approvals] Glossary terms:', glossaryTerms.length, 'Statuses:', glossaryStatusCounts, 'In review:', glossaryReviewRows.length)
+
     // Active rows based on tab
     const activeRows = activeTab === "projects" ? projectReviewRows : glossaryReviewRows
 
     // Filter by search
     const filteredRows = activeRows.filter(row => {
-        const searchLower = searchQuery.toLowerCase()
-        if (activeTab === "projects") {
-            return row.en?.toLowerCase().includes(searchLower) ||
-                row.my?.toLowerCase().includes(searchLower) ||
-                row.zh?.includes(searchQuery) ||
-                row.projectName?.toLowerCase().includes(searchLower)
-        } else {
-            return row.english?.toLowerCase().includes(searchLower) ||
-                row.malay?.toLowerCase().includes(searchLower) ||
-                row.chinese?.includes(searchQuery)
+        if (!searchQuery) return true
+        const q = searchQuery.toLowerCase()
+        if (activeTab === "glossary") {
+            return (row.english || '').toLowerCase().includes(q) ||
+                (row.malay || '').toLowerCase().includes(q) ||
+                (row.chinese || '').toLowerCase().includes(q)
         }
+        return (row.en || '').toLowerCase().includes(q) ||
+            (row.my || '').toLowerCase().includes(q) ||
+            (row.zh || '').toLowerCase().includes(q) ||
+            (row.projectName || '').toLowerCase().includes(q)
     })
+
+    // Slice for pagination
+    const totalItems = filteredRows.length
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedRows = filteredRows.slice(startIndex, endIndex)
+
+    // Reset page when tab/search changes
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [activeTab, searchQuery])
 
     // Selection handlers
     const toggleSelect = (id) => {
@@ -143,13 +194,14 @@ export default function Approvals() {
         try {
             if (activeTab === "projects") {
                 // Process approved project rows
-                const approvedRows = filteredRows.filter(r => approvedIds.includes(r.id))
+                const approvedRows = activeRows.filter(r => approvedIds.includes(r.id))
                 const affectedProjectIds = new Set()
 
                 for (const row of approvedRows) {
                     await updateProjectRow(row.projectId, row.id, {
                         status: 'approved',
-                        approvedAt: new Date().toISOString()
+                        approvedAt: new Date().toISOString(),
+                        remarks: localRemarks[row.id] || ''
                     })
                     affectedProjectIds.add(row.projectId)
                 }
@@ -159,18 +211,28 @@ export default function Approvals() {
                     affectedProjectIds.forEach(pid => recomputeProjectStats(pid))
                 }, 500)
 
-                // Process rejected project rows - set status to 'changes'
-                for (const row of filteredRows.filter(r => rejectedIds.includes(r.id))) {
-                    await updateProjectRow(row.projectId, row.id, { status: 'changes' })
+                // Process rejected project rows - set status to 'changes' with remarks
+                for (const row of activeRows.filter(r => rejectedIds.includes(r.id))) {
+                    await updateProjectRow(row.projectId, row.id, {
+                        status: 'changes',
+                        remarks: localRemarks[row.id] || ''
+                    })
+                    affectedProjectIds.add(row.projectId)
                 }
             } else {
                 // Process approved glossary terms
-                for (const term of filteredRows.filter(t => approvedIds.includes(t.id))) {
-                    await updateGlossaryTerm(term.id, { status: 'approved' })
+                for (const term of activeRows.filter(t => approvedIds.includes(t.id))) {
+                    await updateGlossaryTerm(term.id, {
+                        status: 'approved',
+                        remark: localRemarks[term.id] || ''
+                    })
                 }
-                // Process rejected glossary terms - set status to 'changes'
-                for (const term of filteredRows.filter(t => rejectedIds.includes(t.id))) {
-                    await updateGlossaryTerm(term.id, { status: 'changes' })
+                // Process rejected glossary terms - set status to 'changes' with remarks
+                for (const term of activeRows.filter(t => rejectedIds.includes(t.id))) {
+                    await updateGlossaryTerm(term.id, {
+                        status: 'changes',
+                        remark: localRemarks[term.id] || ''
+                    })
                 }
             }
 
@@ -180,12 +242,23 @@ export default function Approvals() {
             toast.success(`Saved: ${messages.join(', ')}`)
 
             setLocalApprovals({})
+            setLocalRemarks({})
             setSelectedIds([])
         } catch (error) {
             console.error('Error saving items:', error)
             toast.error("Failed to save items")
         }
     }
+
+    // Check if any row has remarks (or local remarks) to decide whether to show the column
+    // Use activeRows (not filtered) to keep column structure stable across searches
+    const hasRemarks = useMemo(() => {
+        return activeRows.some(row => {
+            const remarkText = row.remarks || row.remark || ''
+            const localRemark = localRemarks[row.id] || ''
+            return String(remarkText).trim().length > 0 || String(localRemark).trim().length > 0
+        })
+    }, [activeRows, localRemarks])
 
     // Columns Configuration - widths adjusted to sum 100% so checkbox stays fixed at 52px
     const projectColumns = [
@@ -204,45 +277,49 @@ export default function Approvals() {
                 </div>
             )
         },
-        { header: "English", accessor: "en", width: "22%" },
-        { header: "Bahasa Malaysia", accessor: "my", width: "20%", color: 'hsl(220, 9%, 46%)' },
-        { header: "Chinese", accessor: "zh", width: "18%", color: 'hsl(220, 9%, 46%)' },
+        { header: "English", accessor: "en", width: "20%" },
+        { header: "Bahasa Malaysia", accessor: "my", width: "18%", color: 'hsl(220, 9%, 46%)' },
+        { header: "Chinese", accessor: "zh", width: "16%", color: 'hsl(220, 9%, 46%)' },
+        // Remarks column - always present for stability
         {
-            header: "Status",
-            accessor: "status",
-            width: "12%",
+            header: "Remarks",
+            accessor: "remarks",
+            width: "20%",
             render: (row) => {
                 const localStatus = localApprovals[row.id]
+                const remarkValue = localRemarks[row.id] || ''
 
-                // Status config based on local approval state
-                const statusConfig = {
-                    approved: { color: '#10b981', label: 'Approved' },
-                    rejected: { color: '#ef4444', label: 'Reject' },
-                    pending: { color: '#3b82f6', label: 'Pending' },
+                // Show input when rejected, or show existing remark
+                if (localStatus === 'rejected') {
+                    return (
+                        <input
+                            type="text"
+                            placeholder="Add feedback..."
+                            value={remarkValue}
+                            onChange={(e) => {
+                                e.stopPropagation()
+                                setLocalRemarks(prev => ({ ...prev, [row.id]: e.target.value }))
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full px-2 py-1 text-sm border border-rose-200 rounded bg-rose-50/30 focus:outline-none focus:ring-1 focus:ring-rose-300"
+                            style={{ fontSize: '12px' }}
+                        />
+                    )
                 }
 
-                const status = localStatus || 'pending'
-                const config = statusConfig[status] || statusConfig.pending
-
+                // Show existing remark or placeholder
+                const remarkText = row.remarks ? String(row.remarks) : ''
                 return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            backgroundColor: config.color
-                        }} />
-                        <span style={{ fontSize: '13px', color: 'hsl(220, 9%, 46%)' }}>
-                            {config.label}
-                        </span>
-                    </div>
+                    <span className="text-xs text-zinc-400 italic">
+                        {remarkText.trim() || '—'}
+                    </span>
                 )
             }
         },
         {
             header: "Action",
             accessor: "actions",
-            width: "12%",
+            width: "140px",
             render: (row) => {
                 const localStatus = localApprovals[row.id]
 
@@ -309,64 +386,108 @@ export default function Approvals() {
     ]
 
     const glossaryColumns = [
-        { header: "English", accessor: "english", width: "30%" },
-        { header: "Bahasa Malaysia", accessor: "malay", width: "28%", color: 'hsl(220, 9%, 46%)' },
-        { header: "Chinese", accessor: "chinese", width: "24%", color: 'hsl(220, 9%, 46%)' },
-        {
-            header: "Status",
-            accessor: "status",
-            width: "10%",
+        { header: "English", accessor: "en", width: "24%" },
+        { header: "Bahasa Malaysia", accessor: "my", width: "22%", color: 'hsl(220, 9%, 46%)' },
+        { header: "Chinese", accessor: "cn", width: "20%", color: 'hsl(220, 9%, 46%)' },
+        ...(hasRemarks ? [{
+            header: "Remarks",
+            accessor: "remarks",
+            width: "20%",
             render: (row) => {
                 const localStatus = localApprovals[row.id]
-                if (localStatus === 'approved') {
-                    return (
-                        <div style={{
-                            width: '24px', height: '24px', borderRadius: '4px',
-                            backgroundColor: 'hsl(142, 71%, 45%)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                            <Check style={{ width: '14px', height: '14px', color: 'white' }} />
-                        </div>
-                    )
-                }
+                const remarkValue = localRemarks[row.id] || ''
+
+                // Show input when rejected
                 if (localStatus === 'rejected') {
                     return (
-                        <div style={{
-                            width: '24px', height: '24px', borderRadius: '4px',
-                            backgroundColor: 'hsl(343, 81%, 58%)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                            <X style={{ width: '14px', height: '14px', color: 'white' }} />
-                        </div>
+                        <input
+                            type="text"
+                            placeholder="Add feedback..."
+                            value={remarkValue}
+                            onChange={(e) => {
+                                e.stopPropagation()
+                                setLocalRemarks(prev => ({ ...prev, [row.id]: e.target.value }))
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full px-2 py-1 text-sm border border-rose-200 rounded bg-rose-50/30 focus:outline-none focus:ring-1 focus:ring-rose-300"
+                            style={{ fontSize: '12px' }}
+                        />
                     )
                 }
+
                 return (
-                    <div style={{ width: '24px', height: '24px', borderRadius: '4px', border: '1px dashed hsl(220, 9%, 46%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'hsl(220, 9%, 46%)', opacity: 0.5 }}></div>
-                    </div>
+                    <span className="text-xs text-zinc-400 italic">
+                        {row.remarks || '—'}
+                    </span>
                 )
             }
-        },
+        }] : []),
         {
             header: "Action",
             accessor: "actions",
-            width: "8%",
-            render: (row) => (
-                <div className="flex gap-2">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleApprove(row.id) }}
-                        className="p-1 hover:bg-emerald-50 text-emerald-600 rounded"
-                    >
-                        <Check size={16} />
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleReject(row.id) }}
-                        className="p-1 hover:bg-rose-50 text-rose-500 rounded"
-                    >
-                        <X size={16} />
-                    </button>
-                </div>
-            )
+            width: "140px",
+            render: (row) => {
+                const localStatus = localApprovals[row.id]
+
+                // If already approved/rejected, show icon with undo
+                if (localStatus === 'approved') {
+                    return (
+                        <div className="flex items-center gap-2">
+                            <div style={{
+                                width: '24px', height: '24px', borderRadius: '4px',
+                                backgroundColor: '#10b981',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <Check style={{ width: '14px', height: '14px', color: 'white' }} />
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleCancel(row.id) }}
+                                className="text-xs text-gray-400 hover:text-gray-600"
+                            >
+                                Undo
+                            </button>
+                        </div>
+                    )
+                }
+
+                if (localStatus === 'rejected') {
+                    return (
+                        <div className="flex items-center gap-2">
+                            <div style={{
+                                width: '24px', height: '24px', borderRadius: '4px',
+                                backgroundColor: '#ef4444',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <X style={{ width: '14px', height: '14px', color: 'white' }} />
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleCancel(row.id) }}
+                                className="text-xs text-gray-400 hover:text-gray-600"
+                            >
+                                Undo
+                            </button>
+                        </div>
+                    )
+                }
+
+                // Default: show Approve/Reject buttons
+                return (
+                    <div className="flex gap-1">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleApprove(row.id) }}
+                            className="px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded border border-emerald-200"
+                        >
+                            Approve
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleReject(row.id) }}
+                            className="px-2 py-1 text-xs font-medium text-rose-500 hover:bg-rose-50 rounded border border-rose-200"
+                        >
+                            Reject
+                        </button>
+                    </div>
+                )
+            }
         }
     ]
 
@@ -390,10 +511,27 @@ export default function Approvals() {
                         background: 'none',
                         border: 'none',
                         borderBottom: activeTab === "projects" ? '2px solid #FF0084' : '2px solid transparent',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
                     }}
                 >
                     Projects
+                    {projectReviewRows.length > 0 && (
+                        <span style={{
+                            backgroundColor: '#FF0084',
+                            color: 'white',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '9999px',
+                            minWidth: '18px',
+                            textAlign: 'center'
+                        }}>
+                            {projectReviewRows.length}
+                        </span>
+                    )}
                 </button>
                 <button
                     onClick={() => { setActiveTab("glossary"); setSelectedIds([]); setLocalApprovals({}) }}
@@ -536,15 +674,28 @@ export default function Approvals() {
                     No requests found.
                 </div>
             ) : (
-                <DataTable
-                    columns={activeTab === "projects" ? projectColumns : glossaryColumns}
-                    data={filteredRows}
-                    selectedIds={selectedIds}
-                    onToggleSelect={toggleSelect}
-                    onToggleSelectAll={toggleSelectAll}
-                    onRowClick={(row) => console.log('Row clicked', row)}
-                />
+                <>
+                    <DataTable
+                        columns={activeTab === "projects" ? projectColumns : glossaryColumns}
+                        data={paginatedRows}
+                        selectedIds={selectedIds}
+                        onToggleSelect={toggleSelect}
+                        onToggleSelectAll={toggleSelectAll}
+                    />
+
+                    {/* Pagination */}
+                    {totalItems > 0 && (
+                        <Pagination
+                            currentPage={currentPage}
+                            totalItems={totalItems}
+                            itemsPerPage={itemsPerPage}
+                            onPageChange={setCurrentPage}
+                            onItemsPerPageChange={setItemsPerPage}
+                        />
+                    )}
+                </>
             )}
+
 
         </div>
     )

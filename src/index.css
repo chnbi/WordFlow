@@ -47,8 +47,10 @@
         /* Sidebar: Light gradient feel */
         --sidebar-background: 240 20% 98%;
         --sidebar-foreground: 222 47% 20%;
-        --sidebar-primary: 329 100% 86%; /* #FFB9DD */
-        --sidebar-primary-foreground: 329 100% 50%; /* #FF0084 */
+        --sidebar-primary: 329 100% 86%;
+        /* #FFB9DD */
+        --sidebar-primary-foreground: 329 100% 50%;
+        /* #FF0084 */
         --sidebar-accent: 329 100% 98%;
         --sidebar-accent-foreground: 329 100% 50%;
         --sidebar-border: 220 13% 91%;
@@ -56,50 +58,49 @@
     }
 
     .dark {
-        /* ===== UNIFIED THEME - Dark Mode ===== */
-        --background: 224 71% 4%;
-        --foreground: 210 20% 98%;
-        --app-background: 224 71% 4%;
+        /* ===== UNIFIED THEME - Dark Mode (Zinc/Premium) ===== */
+        --background: 240 10% 3.9%;
+        --foreground: 0 0% 98%;
+        --app-background: 240 10% 3.9%;
 
-        --card: 224 71% 8%;
-        --card-foreground: 210 20% 98%;
+        --card: 240 10% 3.9%;
+        --card-foreground: 0 0% 98%;
 
-        --popover: 224 71% 8%;
-        --popover-foreground: 210 20% 98%;
+        --popover: 240 10% 3.9%;
+        --popover-foreground: 0 0% 98%;
 
-        /* Primary: Pink */
-        /* Primary: Pink */
+        /* Primary: Pink (Preserved) */
         --primary: 329 100% 50%;
         --primary-foreground: 0 0% 100%;
 
-        /* Secondary Pink: #FF4AA7 (Buttons) */
+        /* Secondary Pink: #FF4AA7 */
         --secondary-pink: 329 100% 65%;
         --secondary-pink-foreground: 0 0% 100%;
 
-        --secondary: 215 28% 17%;
-        --secondary-foreground: 210 20% 98%;
+        --secondary: 240 3.7% 15.9%;
+        --secondary-foreground: 0 0% 98%;
 
-        --muted: 215 28% 17%;
-        --muted-foreground: 217 10% 64%;
+        --muted: 240 3.7% 15.9%;
+        --muted-foreground: 240 5% 64.9%;
 
-        --accent: 340 82% 15%;
-        --accent-foreground: 340 82% 70%;
+        --accent: 240 3.7% 15.9%;
+        --accent-foreground: 0 0% 98%;
 
-        --destructive: 0 62% 30%;
-        --destructive-foreground: 0 0% 100%;
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 0 0% 98%;
 
-        --border: 215 28% 17%;
-        --input: 215 28% 17%;
+        --border: 240 3.7% 15.9%;
+        --input: 240 3.7% 15.9%;
         --ring: 340 82% 59%;
 
-        /* Sidebar: Dark mode */
-        --sidebar-background: 224 71% 8%;
-        --sidebar-foreground: 210 20% 98%;
-        --sidebar-primary: 340 82% 59%;
+        /* Sidebar: Dark mode (Deep Zinc) */
+        --sidebar-background: 240 5.9% 10%;
+        --sidebar-foreground: 240 4.8% 95.9%;
+        --sidebar-primary: 329 100% 50%;
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 340 82% 15%;
-        --sidebar-accent-foreground: 340 82% 70%;
-        --sidebar-border: 215 28% 17%;
+        --sidebar-accent: 240 3.7% 15.9%;
+        --sidebar-accent-foreground: 240 4.8% 95.9%;
+        --sidebar-border: 240 3.7% 15.9%;
         --sidebar-ring: 340 82% 59%;
     }
 }
@@ -116,7 +117,7 @@
         line-height: 1.5;
     }
 
-    /* Typography Scale - Figma Exact */
+    /* Typography Scale */
     h1 {
         font-size: 24px;
         font-weight: 700;
@@ -153,29 +154,5 @@
 
     ::-webkit-scrollbar-thumb:hover {
         background: hsl(var(--muted-foreground) / 0.3);
-    }
-}
-
-/* ===== FIGMA OVERRIDES ===== */
-@layer utilities {
-
-    /* Button overrides for pill style */
-    .btn-pill {
-        border-radius: 9999px !important;
-        padding: 6px 16px !important;
-        font-size: 14px !important;
-        font-weight: 400 !important;
-        height: 32px !important;
-    }
-
-    /* Table cell padding - Figma exact */
-    .table-cell {
-        padding: 16px !important;
-    }
-
-    /* Sidebar item padding - Figma exact */
-    .sidebar-item {
-        padding: 8px 12px !important;
-        font-size: 14px !important;
     }
 }

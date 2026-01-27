@@ -1,6 +1,6 @@
 
 // Glossary - Manage translation terms with status workflow (Project-page style UI)
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { Plus, Search, Download, Filter, ArrowUpDown, CheckCircle2, Clock, XCircle, Check, Trash2, Upload, MoreHorizontal, Loader2, Pencil, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,13 +21,14 @@ import { useAuth, ACTIONS } from "@/App"
 import { useGlossary } from "@/context/GlossaryContext"
 import { usePrompts } from "@/context/PromptContext"
 import { COLORS, PillButton, PrimaryButton } from "@/components/ui/shared"
-import { DataTable } from "@/components/ui/DataTable"
+import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
 import { PageHeader, SearchInput, StatusDot } from "@/components/ui/common"
 import { exportGlossaryToExcel } from "@/lib/export"
 import * as XLSX from "xlsx"
 import ImportGlossaryDialog from "@/components/dialogs/ImportGlossaryDialog"
 import { toast } from "sonner"
 import { translateBatch } from "@/api/gemini/text"
+import Pagination from "@/components/Pagination"
 import { PromptCategoryDropdown } from "@/components/ui/PromptCategoryDropdown"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { DuplicateGlossaryDialog } from "@/components/dialogs/DuplicateGlossaryDialog"
@@ -54,6 +55,10 @@ export default function Glossary() {
     const [isTranslating, setIsTranslating] = useState(false)
     const [statusFilter, setStatusFilter] = useState([]) // Multi-selectable status filter
     const fileInputRef = useRef(null)
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(25)
 
     // Duplicate detection state
     const [pendingNewTerms, setPendingNewTerms] = useState([])
@@ -201,26 +206,45 @@ export default function Glossary() {
             if (activeCategory === "All") return matchesSearch && matchesStatus
             return matchesSearch && matchesStatus && term.category === activeCategory
         })
-        .sort((a, b) => {
-            if (!a || !b) return 0
-            // Handle date sorting specially (for "Just now" and date strings)
-            if (sortField === "dateModified") {
-                // "Just now" always comes first when sorting desc
-                if (a.dateModified === "Just now") return sortDirection === "desc" ? -1 : 1
-                if (b.dateModified === "Just now") return sortDirection === "desc" ? 1 : -1
-                // Otherwise compare by id (higher id = newer)
-                return sortDirection === "desc" ? b.id - a.id : a.id - b.id
-            }
-            // Regular string comparison for other fields
-            const aVal = a[sortField]?.toLowerCase?.() || a[sortField] || ''
-            const bVal = b[sortField]?.toLowerCase?.() || b[sortField] || ''
-            if (sortDirection === "asc") return aVal > bVal ? 1 : -1
-            return aVal < bVal ? 1 : -1
-        })
 
-    // Compute button state conditions based on requirementss.txt
-    // MUST be after filteredTerms is defined
-    const hasTerms = filteredTerms.length > 0
+    const sortedTerms = [...filteredTerms].sort((a, b) => {
+        if (!a || !b) return 0
+        // Handle date sorting specially (for "Just now" and date strings)
+        if (sortField === "dateModified") {
+            // "Just now" always comes first when sorting desc
+            if (a.dateModified === "Just now") return sortDirection === "desc" ? -1 : 1
+            if (b.dateModified === "Just now") return sortDirection === "desc" ? 1 : -1
+            // Otherwise compare by id (higher id = newer)
+            return sortDirection === "desc" ? b.id - a.id : a.id - b.id
+        }
+        // Regular string comparison for other fields
+        let valA = a[sortField] || ""
+        let valB = b[sortField] || ""
+
+        if (typeof valA === "string") valA = valA.toLowerCase()
+        if (typeof valB === "string") valB = valB.toLowerCase()
+
+        if (valA < valB) return sortDirection === "asc" ? -1 : 1
+        if (valA > valB) return sortDirection === "asc" ? 1 : -1
+        return 0
+    })
+
+    // Pagination slice
+    const totalItems = sortedTerms.length
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedTerms = sortedTerms.slice(startIndex, endIndex)
+
+    // Reset page when filter/search changes
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [searchQuery, activeCategory, statusFilter])
+
+    // Compute button state conditions
+    // hasTerms uses ORIGINAL terms - for UI elements that should always show (like Filter button)
+    // hasFilteredTerms uses filtered data - for action buttons that operate on visible data
+    const hasTerms = (terms || []).length > 0
+    const hasFilteredTerms = filteredTerms.length > 0
     const hasSelection = selectedIds.length > 0
     const relevantTerms = hasSelection
         ? (terms || []).filter(term => term && selectedIds.includes(term.id))
@@ -228,20 +252,17 @@ export default function Glossary() {
 
     const hasEmptyTranslations = relevantTerms.some(term => term && (!term.my?.trim() || !term.cn?.trim()))
 
-    // Check if ALL rows have translations filled (filtered view)
-    const allFilled = hasTerms && filteredTerms.every(term => term.my?.trim() && term.cn?.trim())
+    // Check if ALL filtered rows have translations filled
+    const allFilled = hasFilteredTerms && filteredTerms.every(term => term.my?.trim() && term.cn?.trim())
 
     // Check if SELECTED rows have translations filled
     const selectionFilled = hasSelection && terms
         .filter(t => selectedIds.includes(t.id))
         .every(t => t.my?.trim() && t.cn?.trim())
 
-    const allTranslated = hasTerms && !hasEmptyTranslations // simplified check (matches previous logic roughly but cleaning it up)
-    // Actually, let's keep allTranslated as "Completed logic" (review or approved OR filled)
-    // Project uses: status check OR content check.
-    // Glossary previous: !hasEmptyTranslations.
+    const allTranslated = hasFilteredTerms && !hasEmptyTranslations
 
-    const allApproved = hasTerms && (terms || []).every(term => !term || term.status === 'approved')
+    const allApproved = hasFilteredTerms && filteredTerms.every(term => !term || term.status === 'approved')
 
     const handleSort = (field) => {
         if (sortField === field) {
@@ -331,10 +352,10 @@ export default function Glossary() {
         }
     }
 
-    const handleEdit = (term) => {
+    const handleEdit = useCallback((term) => {
         setEditingTerm(term)
         setIsDialogOpen(true)
-    }
+    }, [])
 
     const handleSave = (data) => {
         if (editingTerm) {
@@ -495,24 +516,28 @@ export default function Glossary() {
         }
     }
 
-    // Column Definitions for DataTable - using PocketBase field names (en, my, cn)
+    // Column Definitions for DataTable - STABLE structure (no conditional columns)
+    // All columns always present to prevent React reconciliation issues
     const columns = [
-        { header: "English", accessor: "en", width: "22%", sortable: true, color: 'hsl(222, 47%, 11%)' },
-        { header: "Bahasa Malaysia", accessor: "my", width: "20%", color: 'hsl(220, 9%, 46%)' },
-        { header: "Chinese", accessor: "cn", width: "18%", color: 'hsl(220, 9%, 46%)' },
+        { header: "English", accessor: "en", width: "22%", sortable: true },
+        { header: "Bahasa Malaysia", accessor: "my", width: "20%" },
+        { header: "Chinese", accessor: "cn", width: "15%" },
         {
             header: "Status",
             accessor: "status",
-            width: "10%",
+            width: "120px",
             render: (row) => {
                 const config = getStatusConfig(row.status)
+                if (!config) {
+                    return <span className="text-muted-foreground">{row.status || 'Unknown'}</span>
+                }
                 return (
                     <span style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
                         fontSize: '13px',
-                        color: 'hsl(220, 9%, 46%)'
+                        color: 'hsl(var(--muted-foreground))'
                     }}>
                         <span style={{
                             width: '6px',
@@ -522,6 +547,31 @@ export default function Glossary() {
                         }} />
                         {config.label}
                     </span>
+                )
+            }
+        },
+        {
+            header: "Remarks",
+            accessor: "remark",
+            width: "15%",
+            render: (row) => {
+                const rawRemark = row.remark || row.remarks
+                const remarkText = rawRemark ? String(rawRemark) : ''
+
+                if (!remarkText.trim()) return <span style={{ color: 'hsl(220, 13%, 91%)' }}>—</span>
+
+                return (
+                    <div style={{
+                        fontSize: '13px',
+                        color: row.status === 'changes' ? 'hsl(0, 84%, 60%)' : 'hsl(220, 9%, 46%)',
+                        fontStyle: 'italic',
+                        maxWidth: '150px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                    }} title={remarkText}>
+                        {remarkText}
+                    </div>
                 )
             }
         },
@@ -540,24 +590,30 @@ export default function Glossary() {
                     backgroundColor: 'hsl(220, 14%, 96%)',
                     color: 'hsl(220, 9%, 46%)'
                 }}>
-                    {row.category || 'Default'}
+                    {row.category || 'General'}
                 </span>
             )
         },
         {
-            header: "Prompt",
+            header: "Template",
             accessor: "promptId",
             width: "12%",
-            render: (row) => (
-                <PromptCategoryDropdown
-                    currentPromptId={row.promptId}
-                    templates={templates}
-                    onSelect={(promptId) => {
-                        updateTerm(row.id, { promptId })
-                        toast.success('Prompt updated')
-                    }}
-                />
-            )
+            render: (row) => {
+                return (
+                    <PromptCategoryDropdown
+                        currentPromptId={row.promptId}
+                        templates={templates}
+                        onSelect={(promptId) => {
+                            if (!row.id) {
+                                toast.error("Error: Row ID missing")
+                                return
+                            }
+                            updateTerm(row.id, { promptId })
+                            toast.success('Prompt updated')
+                        }}
+                    />
+                )
+            }
         },
         {
             header: "",
@@ -612,44 +668,43 @@ export default function Glossary() {
                 />
 
                 {/* Page Title */}
-                <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '4px', color: 'hsl(222, 47%, 11%)' }}>
+                <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
                     Glossary
                 </h1>
 
                 {/* Action Bar */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0' }}>
-                    <span style={{ fontSize: '14px', color: 'hsl(220, 9%, 46%)' }}>
+                <div className="flex items-center justify-between py-4">
+                    <span className="text-sm text-muted-foreground">
                         {selectedIds.length > 0 ? `${selectedIds.length} row(s) selected` : `${filteredTerms.length} row(s)`}
                     </span>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="flex items-center gap-2">
                         {/* Search */}
-                        <div style={{ position: 'relative' }}>
-                            <input
+                        <div className="relative">
+                            <Input
                                 type="text"
                                 placeholder="Search"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                style={{
-                                    borderRadius: '12px',
-                                    height: '32px',
-                                    width: '140px',
-                                    fontSize: '14px',
-                                    padding: '0 12px 0 32px',
-                                    border: '1px solid hsl(220, 13%, 91%)',
-                                    outline: 'none',
-                                    backgroundColor: 'white'
-                                }}
+                                className="h-8 w-[140px] pl-8 pr-3 text-sm rounded-xl bg-background border-border focus-visible:ring-1 focus-visible:ring-primary"
                             />
-                            <Search style={{
-                                position: 'absolute',
-                                left: '10px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                width: '14px',
-                                height: '14px',
-                                color: 'hsl(220, 9%, 46%)'
-                            }} />
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        </div>
+
+                        {/* Category Filter - using tabs like Prompt Library */}
+                        <div className="flex bg-muted p-1 rounded-lg border border-border">
+                            {['All', ...dynamicCategories.map(c => c.name || c)].map(category => (
+                                <button
+                                    key={category}
+                                    onClick={() => setActiveCategory(category)}
+                                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeCategory === category
+                                        ? 'bg-background text-foreground shadow-sm border border-border'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                                        }`}
+                                >
+                                    {category}
+                                </button>
+                            ))}
                         </div>
 
                         {/* Filter - only show if there are terms AND no selection */}
@@ -657,10 +712,10 @@ export default function Glossary() {
                             <StatusFilterDropdown
                                 selectedStatuses={statusFilter}
                                 onStatusChange={setStatusFilter}
+                                className="h-8 border-border"
                             />
                         )}
 
-                        {/* Import - always shown unless selection active */}
                         {/* Import - always shown unless selection active */}
                         {canDo(ACTIONS.CREATE_GLOSSARY) && !hasSelection && (
                             <PillButton
@@ -676,7 +731,7 @@ export default function Glossary() {
                             <>
                                 <PillButton
                                     variant="outline"
-                                    onClick={handleBulkDelete}
+                                    onClick={() => setBulkDeleteConfirm(true)}
                                 >
                                     <Trash2 style={{ width: '16px', height: '16px' }} /> Delete {selectedIds.length}
                                 </PillButton>
@@ -705,7 +760,7 @@ export default function Glossary() {
                         )}
 
                         {/* Export - Available when NO selection and ALL FILLED */}
-                        {hasTerms && !hasSelection && allFilled && (
+                        {hasFilteredTerms && !hasSelection && allFilled && (
                             <PillButton
                                 variant="outline"
                                 style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
@@ -716,7 +771,7 @@ export default function Glossary() {
                         )}
 
                         {/* Translate No Selection */}
-                        {hasTerms && !hasSelection && !allFilled && (
+                        {hasFilteredTerms && !hasSelection && !allFilled && (
                             <PrimaryButton
                                 style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium, marginLeft: '8px' }}
                                 onClick={handleTranslateAll}
@@ -731,7 +786,7 @@ export default function Glossary() {
                         )}
 
                         {/* Send for Review No Selection */}
-                        {hasTerms && !hasSelection && allTranslated && !allApproved && (
+                        {hasFilteredTerms && !hasSelection && allTranslated && !allApproved && (
                             <PrimaryButton
                                 style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
                                 onClick={handleSendForReview}
@@ -756,9 +811,9 @@ export default function Glossary() {
                 >
                     {/* Inline Add Row */}
                     {isAddingRow && (
-                        <tr style={{ borderBottom: '1px solid hsl(220, 13%, 91%)', backgroundColor: 'hsl(340, 82%, 59%, 0.03)' }}>
-                            <td style={{ width: '52px', padding: '14px 16px' }}></td>
-                            <td style={{ padding: '8px' }}>
+                        <tr style={{ borderBottom: `1px solid ${TABLE_STYLES.borderColor}`, backgroundColor: 'hsl(340, 82%, 59%, 0.03)' }}>
+                            <td style={{ width: TABLE_STYLES.checkboxColumnWidth, padding: TABLE_STYLES.headerPadding }}></td>
+                            <td style={{ padding: TABLE_STYLES.cellPadding }}>
                                 <input
                                     type="text"
                                     placeholder="English term"
@@ -776,7 +831,7 @@ export default function Glossary() {
                                     }}
                                 />
                             </td>
-                            <td style={{ padding: '8px' }}>
+                            <td style={{ padding: TABLE_STYLES.cellPadding }}>
                                 <input
                                     type="text"
                                     placeholder="Bahasa Malaysia"
@@ -793,7 +848,7 @@ export default function Glossary() {
                                     }}
                                 />
                             </td>
-                            <td style={{ padding: '8px' }}>
+                            <td style={{ padding: TABLE_STYLES.cellPadding }}>
                                 <input
                                     type="text"
                                     placeholder="Chinese"
@@ -810,10 +865,10 @@ export default function Glossary() {
                                     }}
                                 />
                             </td>
-                            <td style={{ padding: '8px' }}>
+                            <td style={{ padding: TABLE_STYLES.cellPadding }}>
                                 <span style={{ fontSize: '13px', color: 'hsl(220, 9%, 46%)' }}>Draft</span>
                             </td>
-                            <td style={{ padding: '8px' }}>
+                            <td style={{ padding: TABLE_STYLES.cellPadding }}>
                                 <select
                                     value={newRow.category}
                                     onChange={(e) => setNewRow(prev => ({ ...prev, category: e.target.value }))}
@@ -832,7 +887,7 @@ export default function Glossary() {
                                     ))}
                                 </select>
                             </td>
-                            <td style={{ padding: '8px' }}>
+                            <td style={{ padding: TABLE_STYLES.cellPadding }}>
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     <button
                                         onClick={handleSaveNewRow}
@@ -878,7 +933,7 @@ export default function Glossary() {
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '8px',
-                                        padding: '14px 16px',
+                                        padding: TABLE_STYLES.headerPadding,
                                         width: '100%',
                                         fontSize: '14px',
                                         color: 'hsl(220, 9%, 46%)',
@@ -895,10 +950,16 @@ export default function Glossary() {
                     )}
                 </DataTable>
 
-                {/* Footer */}
-                <div style={{ padding: '16px 0', fontSize: '14px', color: 'hsl(220, 9%, 46%)' }}>
-                    Showing {filteredTerms.length} of {terms.length} terms
-                </div>
+                {/* Pagination */}
+                {totalItems > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={totalItems}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                        onItemsPerPageChange={setItemsPerPage}
+                    />
+                )}
 
                 <ImportGlossaryDialog
                     open={isImportOpen}

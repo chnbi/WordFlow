@@ -1,13 +1,16 @@
 // useProjectData - Hook for managing project data with PocketBase
 import { useState, useCallback, useEffect } from 'react'
 import * as dbService from '@/api/pocketbase'
+import { logAction, AUDIT_ACTIONS } from '@/api/pocketbase'
 import { toast } from 'sonner'
+import { useAuth } from '@/App'
 
 /**
  * Manages project data loading and CRUD operations with PocketBase
  * @returns Project data state and handlers
  */
 export function useProjectData() {
+    const { user } = useAuth()
     const [projects, setProjects] = useState([])
     const [projectRows, setProjectRows] = useState({})  // { projectId: rows[] }
     const [projectPages, setProjectPages] = useState({}) // { projectId: { pages: [], pageRows: { pageId: rows[] } } }
@@ -30,26 +33,32 @@ export function useProjectData() {
                     const allRows = {}
                     const allPagesData = {}
 
+                    // Projects with calculated stats
+                    const projectsWithStats = []
+
                     for (const project of firestoreProjects) {
                         try {
-                            const rows = await dbService.getProjectRows(project.id)
-                            allRows[project.id] = rows || []
+                            const unpagedRows = await dbService.getProjectRows(project.id)
+                            allRows[project.id] = unpagedRows || []
 
                             let pages = await dbService.getProjectPages(project.id)
                             let pageRows = {}
+                            let allProjectRows = [...(unpagedRows || [])]
 
                             // Auto-migrate legacy projects: if has rows but no pages, create Page 1
-                            if (pages.length === 0 && rows && rows.length > 0) {
-                                console.log(`🔄 [Migration] Project ${project.id} has ${rows.length} legacy rows, migrating to Page 1...`)
+                            if (pages.length === 0 && unpagedRows && unpagedRows.length > 0) {
+                                console.log(`🔄 [Migration] Project ${project.id} has ${unpagedRows.length} legacy rows, migrating to Page 1...`)
                                 try {
                                     const page = await dbService.addProjectPage(project.id, { name: 'Page 1' })
                                     // Move rows to the new page
-                                    for (const row of rows) {
+                                    for (const row of unpagedRows) {
                                         await dbService.addPageRows(project.id, page.id, [row])
                                     }
                                     pages = [page]
-                                    pageRows[page.id] = rows
-                                    console.log(`✅ [Migration] Successfully migrated ${rows.length} rows to Page 1`)
+                                    pageRows[page.id] = unpagedRows
+                                    // Update our local reference since they are now paged
+                                    allProjectRows = unpagedRows // Content is same, just location changed
+                                    console.log(`✅ [Migration] Successfully migrated ${unpagedRows.length} rows to Page 1`)
                                 } catch (migrationErr) {
                                     console.error(`❌ [Migration] Failed to migrate project ${project.id}:`, migrationErr)
                                 }
@@ -58,8 +67,46 @@ export function useProjectData() {
                                 for (const page of pages) {
                                     const pRows = await dbService.getPageRows(project.id, page.id)
                                     pageRows[page.id] = pRows || []
+                                    allProjectRows = [...allProjectRows, ...pRows]
                                 }
                             }
+
+                            // Calculate Progress based on ALL rows (paged + unpaged)
+                            const totalRows = allProjectRows.length
+                            const approvedRows = allProjectRows.filter(r => r.status === 'approved' || r.status === 'completed').length
+                            const reviewRows = allProjectRows.filter(r => r.status === 'review').length
+
+                            const progress = totalRows > 0 ? Math.round((approvedRows / totalRows) * 100) : 0
+
+                            // Determine dynamic status
+                            let calculatedStatus = project.status || 'draft'
+
+                            if (totalRows > 0) {
+                                if (reviewRows > 0) {
+                                    calculatedStatus = 'review'
+                                } else if (approvedRows === totalRows) {
+                                    calculatedStatus = 'approved'
+                                } else if (approvedRows > 0) {
+                                    // Partially approved but no active reviews -> could be draft or just in progress
+                                    // Let's default to 'review' if it's not fully approved but has progress
+                                    // Or keep existing status. User asked: "if it is sent for review, even partially, should it be changed to in review?"
+                                    // So if reviewRows > 0 -> Review.
+                                    // User also said "only show approved when fully done".
+                                    calculatedStatus = 'draft' // Default back to draft if partially done but nothing explicitly in review?
+                                    // Actually, if it's partially done, it's usually "In Progress" or "Review" in many systems.
+                                    // But based on "only show approved when fully done", anything else is not approved.
+                                    // If reviewRows > 0, it's Review.
+                                }
+                            }
+
+                            // Attach calculated progress and status to project
+                            // detailed status logic override
+                            const projectWithStats = {
+                                ...project,
+                                progress,
+                                status: (reviewRows > 0) ? 'review' : (totalRows > 0 && approvedRows === totalRows) ? 'approved' : 'draft'
+                            }
+                            projectsWithStats.push(projectWithStats)
 
                             allPagesData[project.id] = { pages, pageRows }
 
@@ -71,11 +118,11 @@ export function useProjectData() {
                         }
                     }
 
-                    setProjects(firestoreProjects)
+                    setProjects(projectsWithStats)
                     setProjectRows(allRows)
                     setProjectPages(allPagesData)
                     setDataSource('firestore')
-                    console.log('✅ [PocketBase] Loaded', firestoreProjects.length, 'projects')
+                    console.log('✅ [PocketBase] Loaded', projectsWithStats.length, 'projects')
                 }
             } catch (error) {
                 console.error('❌ [PocketBase] Error loading data:', error)
@@ -88,6 +135,14 @@ export function useProjectData() {
         }
 
         loadData()
+
+        // Poll for updates every 30 seconds (Auto-refresh)
+        const intervalId = setInterval(() => {
+            console.log('🔄 [Auto-Refresh] Polling for updates...')
+            loadData()
+        }, 30000)
+
+        return () => clearInterval(intervalId)
     }, [])
 
     // Get a project by ID
@@ -259,6 +314,15 @@ export function useProjectData() {
         if (dataSource === 'firestore') {
             try {
                 await dbService.addPageRows(projectId, pageId, rowsWithIds)
+
+                // Audit log
+                if (user) {
+                    await logAction(user, AUDIT_ACTIONS.ROWS_IMPORTED, 'project_rows', pageId, {
+                        projectId,
+                        content: `Added ${rowsWithIds.length} row(s) to page`
+                    })
+                }
+
                 toast.success(`Added ${rowsWithIds.length} row(s)`)
             } catch (error) {
                 console.error('Error adding rows to page:', error)
@@ -267,7 +331,7 @@ export function useProjectData() {
         }
 
         return rowsWithIds
-    }, [dataSource])
+    }, [dataSource, user])
 
     // Delete rows
     const deleteRows = useCallback(async (projectId, rowIds, currentPageId) => {
@@ -298,13 +362,22 @@ export function useProjectData() {
                 } else {
                     await dbService.deleteProjectRows(projectId, rowIds)
                 }
+
+                // Audit log
+                if (user) {
+                    await logAction(user, AUDIT_ACTIONS.ROWS_EXPORTED, 'project_rows', currentPageId || projectId, {
+                        projectId,
+                        content: `Deleted ${rowIds.length} row(s)`
+                    })
+                }
+
                 toast.success(`Deleted ${rowIds.length} row(s)`)
             } catch (error) {
                 console.error('Error deleting rows:', error)
                 toast.error('Failed to delete rows')
             }
         }
-    }, [dataSource])
+    }, [dataSource, user])
 
     // Add a new project
     const addProject = useCallback(async (project) => {
@@ -335,6 +408,14 @@ export function useProjectData() {
                     ...prev,
                     [createdProjectId]: { pages: [], pageRows: {} }
                 }))
+
+                // Audit log for project creation
+                if (user) {
+                    await logAction(user, AUDIT_ACTIONS.PROJECT_CREATED, 'projects', createdProjectId, {
+                        projectId: createdProjectId,
+                        content: `Created project: ${projectData.name || 'Untitled'}`
+                    })
+                }
 
                 // 2. Process Sheets (if any) or Default Page
                 if (sheets && Object.keys(sheets).length > 0) {
@@ -435,6 +516,15 @@ export function useProjectData() {
             if (rows.length > 0) {
                 await dbService.addPageRows(projectId, page.id, rows)
             }
+
+            // Audit log
+            if (user) {
+                await logAction(user, AUDIT_ACTIONS.PAGE_ADDED, 'project_pages', page.id, {
+                    projectId,
+                    content: `Added page: ${pageData.name}`
+                })
+            }
+
             setProjectPages(prev => ({
                 ...prev,
                 [projectId]: {
@@ -448,12 +538,24 @@ export function useProjectData() {
             setSelectedPageId(prev => ({ ...prev, [projectId]: page.id }))
             return page
         }
-    }, [dataSource])
+    }, [dataSource, user])
 
     // Delete a project page
     const deleteProjectPage = useCallback(async (projectId, pageId) => {
         if (dataSource === 'firestore') {
+            // Get page name before deletion for audit log
+            const page = projectPages[projectId]?.pages.find(p => p.id === pageId)
+
             await dbService.deleteProjectPage(projectId, pageId)
+
+            // Audit log
+            if (user && page) {
+                await logAction(user, AUDIT_ACTIONS.PAGE_DELETED, 'project_pages', pageId, {
+                    projectId,
+                    content: `Deleted page: ${page.name}`
+                })
+            }
+
             setProjectPages(prev => {
                 const projectData = prev[projectId] || { pages: [], pageRows: {} }
                 const newPages = projectData.pages.filter(p => p.id !== pageId)
@@ -472,7 +574,7 @@ export function useProjectData() {
                 return prev
             })
         }
-    }, [dataSource])
+    }, [dataSource, user, projectPages])
 
     // Rename a project page
     const renameProjectPage = useCallback(async (projectId, pageId, newName) => {

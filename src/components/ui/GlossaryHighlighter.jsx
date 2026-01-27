@@ -106,6 +106,8 @@ export function GlossaryHighlighter({ text, language, glossaryTerms, hoveredTerm
                     borderRadius: '4px',
                     padding: isHovered ? '0 2px' : 0,
                     transition: 'background-color 0.15s ease',
+                    borderBottom: '1.5px dashed #94a3b8', // Visible dashed underline
+                    paddingBottom: '1px'
                 }}
                 title={`Glossary: ${match.term.english} = ${match.term.malay} / ${match.term.chinese}`}
             >

@@ -8,6 +8,7 @@ import {
   LogOut,
   Sparkles,
 } from "lucide-react"
+import { useAuth } from "@/App"
 
 import {
   Avatar,
@@ -31,8 +32,16 @@ import {
 } from "@/components/ui/sidebar"
 
 export function NavUser({
-  user
+  user,
 }) {
+  const { state } = useSidebar()
+  const { signOut } = useAuth()
+
+  const handleLogout = async () => {
+    await signOut()
+    window.location.reload()
+  }
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -88,7 +97,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>

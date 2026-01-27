@@ -110,50 +110,19 @@ export default function GlossaryTermDialog({ open, onOpenChange, initialData, on
                         </div>
                     </div>
 
-                    {/* Category & Status */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Category</Label>
-                            <Select value={formData.category} onValueChange={v => setFormData(prev => ({ ...prev, category: v }))}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {categories.map(cat => (
-                                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Status</Label>
-                            <Select value={formData.status} onValueChange={v => setFormData(prev => ({ ...prev, status: v }))}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {statuses.map(s => (
-                                        <SelectItem key={s.value} value={s.value}>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`w-2 h-2 rounded-full ${s.value === 'draft' ? 'bg-amber-500' : s.value === 'approved' ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
-                                                {s.label}
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {/* Remark */}
+                    {/* Category */}
                     <div className="space-y-2">
-                        <Label>Remark</Label>
-                        <Textarea
-                            placeholder="Any notes about usage, context, or alternatives to avoid..."
-                            className="h-20 resize-none"
-                            value={formData.remark}
-                            onChange={e => setFormData(prev => ({ ...prev, remark: e.target.value }))}
-                        />
+                        <Label>Category</Label>
+                        <Select value={formData.category} onValueChange={v => setFormData(prev => ({ ...prev, category: v }))}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {categories.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
 
