@@ -20,20 +20,23 @@ import { GlossaryTermDialog, ConfirmDialog } from "@/components/dialogs"
 import { useAuth, ACTIONS } from "@/App"
 import { useGlossary } from "@/context/GlossaryContext"
 import { usePrompts } from "@/context/PromptContext"
-import { COLORS, PillButton, PrimaryButton } from "@/components/ui/shared"
+import { GlossaryHighlighter } from "@/components/ui/GlossaryHighlighter"
+import { COLORS, PillButton, PrimaryButton, PageContainer, Card, IconButton } from "@/components/ui/shared"
 import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
 import { PageHeader, SearchInput, StatusDot } from "@/components/ui/common"
 import { exportGlossaryToExcel } from "@/lib/export"
 import * as XLSX from "xlsx"
 import ImportGlossaryDialog from "@/components/dialogs/ImportGlossaryDialog"
 import { toast } from "sonner"
-import { translateBatch } from "@/api/gemini/text"
+import { getAI } from "@/api/ai"
 import Pagination from "@/components/Pagination"
 import { PromptCategoryDropdown } from "@/components/ui/PromptCategoryDropdown"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { DuplicateGlossaryDialog } from "@/components/dialogs/DuplicateGlossaryDialog"
 import { getStatusConfig, LANGUAGES } from "@/lib/constants"
 import { useApprovalNotifications } from "@/hooks/useApprovalNotifications"
+import { findGlossaryMatches } from "@/lib/glossary-utils"
+
 
 
 // Using centralized STATUS_CONFIG from @/lib/constants
@@ -43,6 +46,7 @@ export default function Glossary() {
     const { terms, addTerm, addTerms, updateTerm, deleteTerm, deleteTerms, categories: dynamicCategories } = useGlossary()
     const { templates } = usePrompts()
     const [searchQuery, setSearchQuery] = useState("")
+    const [hoveredTermId, setHoveredTermId] = useState(null)
     const [activeCategory, setActiveCategory] = useState('All')
     const [selectedIds, setSelectedIds] = useState([])
     const [sortField, setSortField] = useState("dateModified")
@@ -84,12 +88,12 @@ export default function Glossary() {
             if (hasSelection) {
                 // Selected terms - override existing translations
                 termsToTranslate = terms.filter(term => selectedIds.includes(term.id))
-                console.log(`🎯 [Translate] Translating ${termsToTranslate.length} selected glossary terms (override mode)`)
+                console.log(`[Translate] Translating ${termsToTranslate.length} selected glossary terms (override mode)`)
                 toast.info(`Translating ${termsToTranslate.length} selected terms...`)
             } else {
                 // No selection - translate only terms with empty translations (my or cn)
                 termsToTranslate = terms.filter(term => !term.my?.trim() || !term.cn?.trim())
-                console.log(`🎯 [Translate] Translating ${termsToTranslate.length} terms with empty translations`)
+                console.log(`[Translate] Translating ${termsToTranslate.length} terms with empty translations`)
                 if (termsToTranslate.length === 0) {
                     toast.info('All terms already have translations!')
                     setIsTranslating(false)
@@ -104,15 +108,16 @@ export default function Glossary() {
                 prompt: 'Translate accurately while maintaining the original meaning and tone.'
             }
 
-            console.log(`📝 [Translate] Using template: ${defaultTemplate.name}`)
+            console.log(`[Translate] Using template: ${defaultTemplate.name}`)
 
             // Call translation API - use en field for source text
-            const results = await translateBatch(
-                termsToTranslate.map(term => ({ id: term.id, en: term.en })),
-                defaultTemplate,
+            // Call translation API - use en field for source text
+            const results = await getAI().generateBatch(
+                termsToTranslate.map(term => ({ id: term.id, text: term.en })),
                 {
                     targetLanguages: ['my', 'zh'],
-                    glossaryTerms: [] // Don't use glossary for glossary translation
+                    glossaryTerms: [], // Don't use glossary for glossary translation
+                    template: defaultTemplate
                 }
             )
 
@@ -130,11 +135,11 @@ export default function Glossary() {
             }
 
             toast.success(`Successfully translated ${successCount} terms!`)
-            console.log(`✅ [Translate] Completed: ${successCount}/${termsToTranslate.length} terms`)
+            console.log(`[Translate] Completed: ${successCount}/${termsToTranslate.length} terms`)
             setSelectedIds([]) // Clear selection after translation
 
         } catch (error) {
-            console.error('❌ [Translate] Error:', error)
+            console.error('[Translate] Error:', error)
             if (error.message === 'API_NOT_CONFIGURED') {
                 toast.error('Gemini API key not configured. Add VITE_GEMINI_API_KEY to .env')
             } else if (error.message === 'RATE_LIMIT') {
@@ -526,9 +531,57 @@ export default function Glossary() {
     // Column Definitions for DataTable - STABLE structure (no conditional columns)
     // All columns always present to prevent React reconciliation issues
     const columns = [
-        { header: LANGUAGES.en.label, accessor: "en", width: "22%", sortable: true },
-        { header: LANGUAGES.my.label, accessor: "my", width: "20%" },
-        { header: LANGUAGES.zh.label, accessor: "cn", width: "15%" }, // Note: Glossary uses 'cn' field
+        {
+            header: LANGUAGES.en.label,
+            accessor: "en",
+            width: "22%",
+            sortable: true,
+            render: (row) => (
+                <div className="whitespace-pre-wrap">
+                    <GlossaryHighlighter
+                        text={row.en || ''}
+                        language="en"
+                        glossaryTerms={terms.filter(t => t.id !== row.id)}
+                        hoveredTermId={hoveredTermId}
+                        onHover={setHoveredTermId}
+                    />
+                </div>
+            )
+        },
+        {
+            header: LANGUAGES.my.label,
+            accessor: "my",
+            width: "22%",
+            sortable: true,
+            render: (row) => (
+                <div className="whitespace-pre-wrap">
+                    <GlossaryHighlighter
+                        text={row.my || ''}
+                        language="my"
+                        glossaryTerms={terms.filter(t => t.id !== row.id)}
+                        hoveredTermId={hoveredTermId}
+                        onHover={setHoveredTermId}
+                    />
+                </div>
+            )
+        },
+        {
+            header: LANGUAGES.zh.label,
+            accessor: "cn",
+            width: "22%",
+            sortable: true,
+            render: (row) => (
+                <div className="whitespace-pre-wrap">
+                    <GlossaryHighlighter
+                        text={row.cn || ''}
+                        language="zh"
+                        glossaryTerms={terms.filter(t => t.id !== row.id)}
+                        hoveredTermId={hoveredTermId}
+                        onHover={setHoveredTermId}
+                    />
+                </div>
+            )
+        }, // Note: Glossary uses 'cn' field
         {
             header: "Status",
             accessor: "status",
@@ -539,21 +592,13 @@ export default function Glossary() {
                     return <span className="text-muted-foreground">{row.status || 'Unknown'}</span>
                 }
                 return (
-                    <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        fontSize: '13px',
-                        color: 'hsl(var(--muted-foreground))'
-                    }}>
-                        <span style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            backgroundColor: config.color
-                        }} />
+                    <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                        <span
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: config.color }}
+                        />
                         {config.label}
-                    </span>
+                    </div>
                 )
             }
         },
@@ -568,15 +613,7 @@ export default function Glossary() {
                 if (!remarkText.trim()) return <span style={{ color: 'hsl(220, 13%, 91%)' }}>—</span>
 
                 return (
-                    <div style={{
-                        fontSize: '13px',
-                        color: row.status === 'changes' ? 'hsl(0, 84%, 60%)' : 'hsl(220, 9%, 46%)',
-                        fontStyle: 'italic',
-                        maxWidth: '150px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                    }} title={remarkText}>
+                    <div className="text-[13px] text-slate-500 italic truncate max-w-[150px]" title={remarkText}>
                         {remarkText}
                     </div>
                 )
@@ -587,16 +624,7 @@ export default function Glossary() {
             accessor: "category",
             width: "10%",
             render: (row) => (
-                <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '4px 10px',
-                    borderRadius: '9999px',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    backgroundColor: 'hsl(220, 14%, 96%)',
-                    color: 'hsl(220, 9%, 46%)'
-                }}>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
                     {row.category || 'General'}
                 </span>
             )
@@ -629,32 +657,20 @@ export default function Glossary() {
             render: (row) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '24px',
-                                height: '24px',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                cursor: 'pointer',
-                                borderRadius: '4px'
-                            }}
-                        >
-                            <MoreHorizontal style={{ width: '16px', height: '16px', color: 'hsl(220, 9%, 46%)' }} />
-                        </button>
+                        <IconButton>
+                            <MoreHorizontal className="w-4 h-4 text-slate-500" />
+                        </IconButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" style={{ minWidth: '120px' }}>
-                        <DropdownMenuItem onClick={() => handleEdit(row)} style={{ cursor: 'pointer' }}>
-                            <Pencil style={{ width: '14px', height: '14px', marginRight: '8px' }} />
+                        <DropdownMenuItem onClick={() => handleEdit(row)} className="cursor-pointer">
+                            <Pencil className="w-3.5 h-3.5 mr-2 text-slate-500" />
                             Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => setDeleteConfirm(row.id)}
-                            style={{ cursor: 'pointer', color: 'hsl(0, 84%, 60%)' }}
+                            className="cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50"
                         >
-                            <Trash2 style={{ width: '14px', height: '14px', marginRight: '8px' }} />
+                            <Trash2 className="w-3.5 h-3.5 mr-2" />
                             Delete
                         </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -665,29 +681,34 @@ export default function Glossary() {
 
     return (
         <TooltipProvider>
-            <div className="w-full pb-10">
+            <PageContainer>
                 <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleImportFromFile}
-                    accept=".xlsx,.xls,.csv"
+                    accept=".xlsx,.xls,.csv,.docx"
                     className="hidden"
                 />
 
                 {/* Page Title */}
-                <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
+                {/* Page Title */}
+                {/* Page Title */}
+                <PageHeader
+                    description="Manage your translation terms and definitions"
+                    actions={
+                        canDo(ACTIONS.CREATE_GLOSSARY) && (
+                            <PrimaryButton onClick={handleCreate}>
+                                <Plus className="w-4 h-4 mr-2" />
+                                New Term
+                            </PrimaryButton>
+                        )
+                    }
+                >
                     Glossary
-                </h1>
+                </PageHeader>
 
                 {/* Category Filter Tags */}
-                <div style={{
-                    display: 'flex',
-                    gap: '8px',
-                    marginTop: '16px',
-                    marginBottom: '16px',
-                    overflowX: 'auto',
-                    paddingBottom: '4px'
-                }}>
+                <div className="flex gap-2 my-4 overflow-x-auto pb-1 no-scrollbar">
                     {['All', ...new Set([
                         'General',
                         ...dynamicCategories.map(c => c.name || c),
@@ -696,18 +717,7 @@ export default function Glossary() {
                         <button
                             key={category}
                             onClick={() => setActiveCategory(category)}
-                            style={{
-                                padding: '8px 16px',
-                                borderRadius: '9999px',
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                border: 'none',
-                                cursor: 'pointer',
-                                whiteSpace: 'nowrap',
-                                backgroundColor: activeCategory === category ? '#FF0084' : 'hsl(220, 14%, 96%)',
-                                color: activeCategory === category ? 'white' : 'hsl(220, 9%, 46%)',
-                                transition: 'all 0.15s'
-                            }}
+                            className={`px-4 py-2 rounded-full text-[13px] font-medium border-none cursor-pointer whitespace-nowrap transition-all duration-150 ${activeCategory === category ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                         >
                             {category}
                         </button>
@@ -920,7 +930,7 @@ export default function Glossary() {
                                             fontSize: '12px',
                                             fontWeight: 500,
                                             color: 'white',
-                                            backgroundColor: '#FF0084',
+                                            backgroundColor: COLORS.primary,
                                             border: 'none',
                                             borderRadius: '6px',
                                             cursor: 'pointer'
@@ -1041,7 +1051,7 @@ export default function Glossary() {
                     confirmLabel="Add Anyway"
                     variant="default"
                 />
-            </div>
+            </PageContainer>
         </TooltipProvider >
     )
 }

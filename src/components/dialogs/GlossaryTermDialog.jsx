@@ -27,7 +27,7 @@ const statuses = [
 ]
 
 export default function GlossaryTermDialog({ open, onOpenChange, initialData, onSave }) {
-    // Using PocketBase field names: en, my, cn
+    // Using Firebase field names: en, my, cn
     const [formData, setFormData] = useState({
         en: '',
         my: '',

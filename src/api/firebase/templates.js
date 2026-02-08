@@ -1,5 +1,19 @@
-// services/pocketbase/templates.js - Prompt Template CRUD operations for PocketBase
-import pb from './client'
+// services/firebase/templates.js
+import { db } from '../../lib/firebase';
+import {
+    collection,
+    doc,
+    getDocs,
+    getDoc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    orderBy,
+    serverTimestamp
+} from 'firebase/firestore';
+
+const COLLECTION = 'prompt_templates';
 
 // ==========================================
 // DEFAULT TEMPLATE DEFINITION
@@ -24,7 +38,7 @@ Guidelines:
     color: "bg-slate-50 dark:bg-slate-950/30",
     isDefault: true,
     status: "published"
-}
+};
 
 // ==========================================
 // TEMPLATES CRUD
@@ -32,13 +46,12 @@ Guidelines:
 
 export async function getTemplates() {
     try {
-        const records = await pb.collection('prompt_templates').getFullList({
-            sort: '-created'
-        })
-        return records
+        const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
-        console.error('Error fetching templates:', error)
-        return []
+        console.error('Error fetching templates:', error);
+        return [];
     }
 }
 
@@ -47,63 +60,59 @@ export async function getTemplates() {
  */
 export async function getOrCreateDefaultTemplate() {
     try {
-        // Get all templates and find default in code (safer than filter if field doesn't exist)
-        const records = await pb.collection('prompt_templates').getFullList({
-            sort: '-created'
-        })
-
-        const defaultTemplate = records.find(t => t.isDefault === true)
+        const records = await getTemplates();
+        const defaultTemplate = records.find(t => t.isDefault === true);
 
         if (defaultTemplate) {
-            console.log('✅ [PocketBase] Default template exists:', defaultTemplate.id)
-            return defaultTemplate
+            return defaultTemplate;
         }
 
         // No default template - create one
-        console.log('📝 [PocketBase] Creating default template...')
-        const created = await pb.collection('prompt_templates').create(DEFAULT_TEMPLATE)
-        console.log('✅ [PocketBase] Default template created:', created.id)
-        return created
+        console.log('📝 [Firebase] Creating default template...');
+        const docRef = await addDoc(collection(db, COLLECTION), {
+            ...DEFAULT_TEMPLATE,
+            createdAt: serverTimestamp()
+        });
+
+        return { id: docRef.id, ...DEFAULT_TEMPLATE };
 
     } catch (error) {
-        console.error('Error getting/creating default template:', error)
+        console.error('Error getting/creating default template:', error);
         // Return the constant as fallback (won't be in DB but app can still work)
-        return { ...DEFAULT_TEMPLATE, id: 'fallback-default' }
+        return { ...DEFAULT_TEMPLATE, id: 'fallback-default' };
     }
 }
 
 export async function createTemplate(templateData) {
     try {
-        const record = await pb.collection('prompt_templates').create({
+        const docRef = await addDoc(collection(db, COLLECTION), {
             ...templateData,
             status: templateData.status || 'draft',
-            author: templateData.author || 'You'
-        })
-        console.log('✅ [PocketBase] Template created:', record.id)
-        return record
+            author: templateData.author || 'You',
+            createdAt: serverTimestamp()
+        });
+        return { id: docRef.id, ...templateData };
     } catch (error) {
-        console.error('Error creating template:', error)
-        throw error
+        console.error('Error creating template:', error);
+        throw error;
     }
 }
 
 export async function updateTemplate(id, updates) {
     try {
-        await pb.collection('prompt_templates').update(id, updates)
-        console.log('✅ [PocketBase] Template updated:', id)
+        const docRef = doc(db, COLLECTION, id);
+        await updateDoc(docRef, updates);
     } catch (error) {
-        console.error('Error updating template:', error)
-        throw error
+        console.error('Error updating template:', error);
+        throw error;
     }
 }
 
 export async function deleteTemplate(id) {
     try {
-        await pb.collection('prompt_templates').delete(id)
-        console.log('✅ [PocketBase] Template deleted:', id)
+        await deleteDoc(doc(db, COLLECTION, id));
     } catch (error) {
-        console.error('Error deleting template:', error)
-        throw error
+        console.error('Error deleting template:', error);
+        throw error;
     }
 }
-

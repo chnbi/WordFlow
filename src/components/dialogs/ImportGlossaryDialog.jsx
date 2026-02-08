@@ -219,7 +219,7 @@ export default function ImportGlossaryDialog({ open, onOpenChange, onImport }) {
                                 <input
                                     ref={fileInputRef}
                                     type="file"
-                                    accept=".xlsx,.xls,.csv"
+                                    accept=".xlsx,.xls,.csv,.docx"
                                     onChange={handleFileChange}
                                     className="hidden"
                                 />

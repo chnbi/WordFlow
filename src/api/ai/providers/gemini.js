@@ -18,9 +18,12 @@ export class GeminiProvider extends BaseAIProvider {
         this.client = null;
     }
 
+    /**
+     * Initialize the GoogleGenAI client
+     */
     initialize() {
         if (!this.apiKey) {
-            console.warn('❌ [GeminiProvider] No API Key found');
+            console.warn('❌ [Gemini] No API Key found');
             return false;
         }
         this.client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -28,46 +31,103 @@ export class GeminiProvider extends BaseAIProvider {
     }
 
     /**
-     * Generate translations
-     * @param {Array} items - {id, text, context}
-     * @param {Object} options 
+     * Update API key at runtime
+     * @param {string} newApiKey
+     */
+    setApiKey(newApiKey) {
+        if (newApiKey && newApiKey !== this.apiKey) {
+            this.apiKey = newApiKey;
+            this.client = new GoogleGenAI({ apiKey: this.apiKey });
+            console.log('🔑 [Gemini] API key updated');
+        }
+    }
+
+    // ============================================
+    // PUBLIC METHODS
+    // ============================================
+
+    /**
+     * Generate translations for a batch of items
+     * @param {Array} items - Items to translate {id, text, context}
+     * @param {Object} options - { sourceLanguage, targetLanguages, template, glossaryTerms }
      */
     async generateBatch(items, options = {}) {
-        if (!this.client) this.initialize();
-        if (!this.client) throw new Error('PROVIDER_NOT_CONFIGURED');
+        this._validateConfig();
 
         const {
             sourceLanguage = 'en',
-            targetLanguages = [], // ['my', 'zh']
+            targetLanguages = [],
             template,
             glossaryTerms = []
         } = options;
 
-        console.log('🚀 [Gemini] Batch Request:', {
-            count: items.length,
-            targets: targetLanguages
-        });
+        console.log('🚀 [Gemini] Batch Request:', { count: items.length, targets: targetLanguages });
 
-        // 1. Build Prompt
-        const prompt = this._buildPrompt(items, template, targetLanguages, glossaryTerms, sourceLanguage);
-
-        // 2. Call API
         try {
-            const start = Date.now();
-            const response = await this.client.models.generateContent({
-                model: this.model,
-                contents: prompt,
-            });
-            const duration = Date.now() - start;
-            console.log(`✅ [Gemini] Response in ${duration}ms`);
+            // 1. Prepare Prompt
+            const prompt = this._buildBatchPrompt(items, template, targetLanguages, glossaryTerms, sourceLanguage);
 
-            // 3. Parse & Format as V2 Output
-            return this._parseResponse(response.text, items, targetLanguages);
+            // 2. Execute API Call
+            const responseText = await this._executeGenAI(prompt);
+
+            // 3. Parse Response
+            return this._parseBatchResponse(responseText, items, targetLanguages);
 
         } catch (error) {
-            console.error('❌ [Gemini] Error:', error);
-            if (error.status === 429) throw new Error('RATE_LIMIT');
-            throw error;
+            this._handleError(error);
+        }
+    }
+
+    /**
+     * Extract text from an image (OCR)
+     * @param {File} imageFile 
+     */
+    async extractTextFromImage(imageFile) {
+        this._validateConfig();
+        console.log(`🚀 [Gemini] Extracting text from image: ${imageFile.name}`);
+
+        try {
+            const imagePart = await this._fileToGenerativePart(imageFile);
+            const prompt = `Extract all text from this image. Return the result as a JSON array of objects, where each object has an "id" (number) and "text" (string) field. Preserves original line breaks as separate items.`;
+
+            const responseText = await this._executeGenAI([prompt, imagePart]);
+            return this._parseOCRResponse(responseText);
+
+        } catch (error) {
+            this._handleError(error);
+        }
+    }
+
+    /**
+     * Extract text and translate in one step
+     * @param {File} imageFile 
+     * @param {Array} targetLanguages 
+     * @param {Array} glossaryTerms 
+     */
+    async extractAndTranslate(imageFile, targetLanguages = ['my', 'zh'], glossaryTerms = []) {
+        this._validateConfig();
+        console.log(`🚀 [Gemini] OCR + Translate: ${imageFile.name}`);
+
+        try {
+            const imagePart = await this._fileToGenerativePart(imageFile);
+            const glossaryText = this._buildGlossarySection(glossaryTerms, []); // Pass empty items as we don't know text yet
+
+            const prompt = `
+Extract all text from this image and translate it to ${targetLanguages.join(', ')}.
+${glossaryText}
+
+Return a valid JSON array where each item has:
+- "id": number
+- "text": original text
+- "en": original text (if detected)
+- ${targetLanguages.map(lang => `"${lang}": translated text`).join('\n- ')}
+`;
+
+            const responseText = await this._executeGenAI([prompt, imagePart]);
+            return this._parseExtractAndTranslateResponse(responseText, targetLanguages);
+
+        } catch (error) {
+            this._handleError(error);
         }
     }
 
@@ -80,35 +140,61 @@ export class GeminiProvider extends BaseAIProvider {
                 model: this.model,
                 contents: "Say 'OK'",
             });
-            return { success: true, message: res.text };
+            return { success: true, message: res.text() };
         } catch (e) {
             return { success: false, message: e.message };
         }
     }
 
-    // --- Internal Helpers ---
+    // ============================================
+    // INTERNAL HELPERS
+    // ============================================
 
-    _buildPrompt(items, template, targetLanguages, glossaryTerms, sourceLang) {
-        // Resolve Language Names (using centralized LANGUAGES constant)
+    _validateConfig() {
+        if (!this.client) this.initialize();
+        if (!this.client) throw new Error('PROVIDER_NOT_CONFIGURED');
+    }
+
+    async _executeGenAI(contents) {
+        const start = Date.now();
+        const result = await this.client.models.generateContent({
+            model: this.model,
+            contents: contents,
+        });
+        const duration = Date.now() - start;
+        console.log(`✅ [Gemini] Response in ${duration}ms`);
+
+        if (result.response && typeof result.response.text === 'function') {
+            return result.response.text();
+        } else if (result && typeof result.text === 'function') {
+            return result.text(); // Handle updated SDK structure
+        } else {
+            console.error('❌ [Gemini] Unexpected response structure:', result);
+            throw new Error('AI_INVALID_RESPONSE_STRUCTURE');
+        }
+    }
+
+    _handleError(error) {
+        console.error('❌ [Gemini] Error:', error);
+        if (error.status === 429) throw new Error('RATE_LIMIT');
+        throw error;
+    }
+
+    // --- Prompt Builders ---
+
+    _buildBatchPrompt(items, template, targetLanguages, glossaryTerms, sourceLang) {
         const sourceLangName = getLangName(sourceLang);
         const targetLangNames = targetLanguages.map(l => getLangName(l)).join(', ');
 
-        // Process Template (no fallback - template must be provided)
-        if (!template?.prompt) {
-            throw new Error('MISSING_TEMPLATE: No prompt template provided');
-        }
-        let instructions = template.prompt;
-        instructions = instructions.replace(/\{\{targetLanguage\}\}/gi, targetLangNames);
+        if (!template?.prompt) throw new Error('MISSING_TEMPLATE');
 
-        // Build Glossary
+        const instructions = template.prompt.replace(/\{\{targetLanguage\}\}/gi, targetLangNames);
         const glossarySection = this._buildGlossarySection(glossaryTerms, items);
 
         return `# Translation Task
-
-## Role
-You are a professional translator.
-- Source Language: ${sourceLangName}
-- Target Languages: ${targetLangNames}
+Role: Professional Translator
+Source: ${sourceLangName}
+Targets: ${targetLangNames}
 
 ## Instructions
 ${instructions}
@@ -119,49 +205,41 @@ ${glossarySection}
 ${JSON.stringify(items.map(i => ({ id: i.id, text: i.text, context: i.context })), null, 2)}
 \`\`\`
 
-## Output Requirements
-Return ONLY a valid JSON array with this exact structure:
-\`\`\`json
-[
-  {
-    "id": "row_id",
-    "translations": {
-      "${targetLanguages[0]}": { "text": "..." },
-      "${targetLanguages[1] || 'lang2'}": { "text": "..." }
-    }
-  }
-]
-\`\`\`
-
-**Rules:**
-- Return ONLY valid JSON (no markdown, no extra text)
-- Include ALL target languages in each translation object
+## Output
+Return JSON array with structure:
+[{ "id": "val", "translations": { "lang_code": { "text": "..." } } }]
 `;
     }
 
     _buildGlossarySection(terms, items) {
         if (!terms.length) return '';
-        // Lite-RAG: Filter relevant terms
-        const combinedText = items.map(i => i.text).join(' ').toLowerCase();
-        const relevant = terms.filter(t => combinedText.includes((t.english || t.term).toLowerCase()));
+
+        // Lite-RAG: Filter if items provided, else use all
+        let relevant = terms;
+        if (items && items.length > 0) {
+            const combinedText = items.map(i => i.text).join(' ').toLowerCase();
+            relevant = terms.filter(t => {
+                const termText = t.english || t.term || t.en || '';
+                return termText && combinedText.includes(termText.toLowerCase());
+            });
+        }
 
         if (!relevant.length) return '';
 
         return `
 ## Mandatory Glossary
-Use these exact translations if the term appears:
 | Term | Translations |
 |---|---|
 ${relevant.map(t => `| ${t.english || t.term} | ${JSON.stringify(t.translations || {})} |`).join('\n')}
 `;
     }
 
-    _parseResponse(text, originalItems, targetLanguages) {
-        try {
-            const cleaner = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            const json = JSON.parse(cleaner);
+    // --- Response Parsers ---
 
-            // Map back to guarantee structure
+    _parseBatchResponse(text, originalItems, targetLanguages) {
+        try {
+            const json = this._cleanAndParseJSON(text);
+
             return originalItems.map(item => {
                 const match = json.find(j => String(j.id) === String(item.id));
                 const translations = {};
@@ -170,18 +248,74 @@ ${relevant.map(t => `| ${t.english || t.term} | ${JSON.stringify(t.translations 
                     const tData = match?.translations?.[lang];
                     translations[lang] = {
                         text: typeof tData === 'object' ? tData.text : (tData || ''),
-                        status: 'review' // Default status for new translations
+                        status: 'review'
                     };
                 });
 
-                return {
-                    id: item.id,
-                    translations // V2 Nested Structure
-                };
+                return { id: item.id, translations };
             });
         } catch (e) {
             console.error('JSON Parse Error:', text);
             throw new Error('AI_RESPONSE_PARSE_FAILED');
         }
+    }
+
+    _parseOCRResponse(text) {
+        try {
+            const json = this._cleanAndParseJSON(text);
+            return json.map(item => ({
+                id: item.id || Date.now() + Math.random(),
+                text: item.text || '',
+                en: item.text || '' // Default 'en' to text
+            }));
+        } catch (e) {
+            console.error('OCR Parse Error:', text);
+            return []; // Fail gracefully for OCR
+        }
+    }
+
+    _parseExtractAndTranslateResponse(text, targetLanguages) {
+        try {
+            const json = this._cleanAndParseJSON(text);
+            return json.map(item => {
+                const result = {
+                    id: item.id || Date.now(),
+                    text: item.text || item.en || '',
+                    en: item.en || item.text || '',
+                    translated: true
+                };
+
+                targetLanguages.forEach(lang => {
+                    result[lang] = item[lang] || '';
+                });
+
+                return result;
+            });
+        } catch (e) {
+            console.error('Extract+Translate Parse Error:', text);
+            return [];
+        }
+    }
+
+    _cleanAndParseJSON(text) {
+        const cleaner = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleaner);
+    }
+
+    async _fileToGenerativePart(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64Data = reader.result.split(',')[1];
+                resolve({
+                    inlineData: {
+                        data: base64Data,
+                        mimeType: file.type
+                    }
+                });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
     }
 }

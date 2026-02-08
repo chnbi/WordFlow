@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button"
 import { PromptDetailDialog, ConfirmDialog } from "@/components/dialogs"
 import { usePrompts } from "@/context/PromptContext"
 import { useAuth, ACTIONS } from "@/App"
-import { COLORS, PrimaryButton, SecondaryButton, PillButton, IconButton } from "@/components/ui/shared"
-import { SearchInput } from "@/components/ui/common"
+import { COLORS, PrimaryButton, SecondaryButton, PillButton, IconButton, PageContainer, Card } from "@/components/ui/shared"
+import { SearchInput, PageHeader } from "@/components/ui/common"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { getStatusConfig } from "@/lib/constants"
 import { toast } from "sonner"
@@ -26,9 +26,9 @@ export default function PromptLibrary() {
 
     // Prompt-specific status options - using centralized config
     const PROMPT_STATUS_OPTIONS = [
-        { id: 'draft', label: 'Draft', color: '#94a3b8' },
-        { id: 'review', label: 'In Review', color: '#3b82f6' },
-        { id: 'published', label: 'Published', color: '#10b981' },
+        { id: 'draft', label: 'Draft', color: COLORS.light.darkGrey },
+        { id: 'review', label: 'In Review', color: COLORS.blue },
+        { id: 'published', label: 'Published', color: COLORS.positive },
     ]
 
     // Check if there are any custom prompts (non-default)
@@ -108,7 +108,6 @@ export default function PromptLibrary() {
         setOpenMenu(null)
     }
 
-    // Parse prompt content for display (Role, Goal, Constraints)
     const parsePromptContent = (prompt) => {
         const lines = prompt?.split('\n') || []
         let role = '', goal = '', constraints = ''
@@ -123,7 +122,6 @@ export default function PromptLibrary() {
             }
         })
 
-        // Fallback: use first 100 chars as goal if no structured content
         if (!role && !goal && !constraints && prompt) {
             goal = prompt.substring(0, 100) + (prompt.length > 100 ? '...' : '')
         }
@@ -132,350 +130,200 @@ export default function PromptLibrary() {
     }
 
     return (
-        <div className="w-full pb-10">
-            {/* Header */}
-            <div style={{ marginBottom: '16px' }}>
-                <h1 style={{
-                    fontSize: '24px',
-                    fontWeight: 700,
-                    letterSpacing: '-0.02em',
-                    color: 'hsl(222, 47%, 11%)',
-                    marginBottom: '0'
-                }}>
+        <PageContainer>
+            {/* Header & Controls */}
+            <div className="flex flex-col gap-6 mb-8">
+                <PageHeader
+                    description="Manage your AI translation prompts and templates"
+                    actions={
+                        canDo(ACTIONS.CREATE_PROMPT) && (
+                            <PrimaryButton onClick={handleCreate} className="w-full md:w-auto">
+                                <CirclePlus className="w-4 h-4 mr-2" />
+                                New Template
+                            </PrimaryButton>
+                        )
+                    }
+                >
                     Prompt Library
-                </h1>
-            </div>
+                </PageHeader>
 
-            {/* Category Filter Tabs */}
-            <div style={{
-                display: 'flex',
-                gap: '8px',
-                marginBottom: '16px',
-                overflowX: 'auto',
-                paddingBottom: '4px'
-            }}>
-                {allCategories.map(category => (
-                    <button
-                        key={category}
-                        onClick={() => setActiveCategory(category)}
-                        style={{
-                            padding: '8px 16px',
-                            borderRadius: '9999px',
-                            fontSize: '13px',
-                            fontWeight: 500,
-                            border: 'none',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                            backgroundColor: activeCategory === category ? '#FF0084' : 'hsl(220, 14%, 96%)',
-                            color: activeCategory === category ? 'white' : 'hsl(220, 9%, 46%)',
-                            transition: 'all 0.15s'
-                        }}
-                    >
-                        {category}
-                    </button>
-                ))}
-            </div>
-
-            {/* Action Bar - prompt count on left, buttons on right */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                marginBottom: '24px'
-            }}>
-                {/* Left side - Prompt count */}
-                <span style={{
-                    fontSize: '14px',
-                    color: 'hsl(220, 9%, 46%)'
-                }}>
-                    {templates.length} prompt(s)
-                </span>
-
-                {/* Right side - Search and buttons */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    {/* Search */}
-                    <SearchInput
-                        value={searchQuery}
-                        onChange={setSearchQuery}
-                        placeholder="Search"
-                        width="200px"
-                    />
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                    {/* Category Tabs */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none max-w-full md:max-w-2xl">
+                        {allCategories.map(category => (
+                            <button
+                                key={category}
+                                onClick={() => setActiveCategory(category)}
+                                className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${activeCategory === category
+                                    ? 'bg-primary text-white shadow-md shadow-primary/25'
+                                    : 'bg-white text-slate-500 hover:bg-slate-50 border border-transparent hover:border-slate-200'
+                                    }`}
+                            >
+                                {category}
+                            </button>
+                        ))}
+                    </div>
 
                     {/* Filters */}
-                    <StatusFilterDropdown
-                        selectedStatuses={statusFilter}
-                        onStatusChange={setStatusFilter}
-                        statusOptions={PROMPT_STATUS_OPTIONS}
-                    />
-
-
-
-                    {/* New Template Button */}
-                    {/* Create Button - Managers Only */}
-                    {canDo(ACTIONS.CREATE_PROMPT) && (
-                        <PrimaryButton onClick={handleCreate} style={{ height: '36px', fontSize: '14px' }}>
-                            <CirclePlus style={{ width: '14px', height: '14px' }} />
-                            New template
-                        </PrimaryButton>
-                    )}
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                        <SearchInput
+                            value={searchQuery}
+                            onChange={setSearchQuery}
+                            placeholder="Search templates..."
+                            className="bg-white"
+                        />
+                        <StatusFilterDropdown
+                            selectedStatuses={statusFilter}
+                            onStatusChange={setStatusFilter}
+                            statusOptions={PROMPT_STATUS_OPTIONS}
+                        />
+                    </div>
                 </div>
             </div>
 
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: '20px'
-            }}>
-                {/* No prompts found message */}
-                {sortedTemplates.length === 0 && (
-                    <div style={{
-                        gridColumn: '1 / -1',
-                        textAlign: 'center',
-                        padding: '60px 20px',
-                        color: 'hsl(220, 9%, 46%)'
-                    }}>
-                        <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>
-                            No prompts found
-                        </p>
-                        <p style={{ fontSize: '14px' }}>
-                            Try adjusting your search or filter criteria.
-                        </p>
+            {/* Grid Content */}
+            {sortedTemplates.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-slate-200 text-center">
+                    <div className="bg-slate-50 p-4 rounded-full mb-4">
+                        <Search className="w-8 h-8 text-slate-400" />
                     </div>
-                )}
-                {/* Template Cards */}
-                {sortedTemplates.map(template => {
-                    const status = getStatusConfig(template.status)
-                    const { role, goal, constraints } = parsePromptContent(template.prompt)
-                    // Fix: Use tags if available, fallback to category, then Default
-                    const firstTag = template.tags && template.tags.length > 0 ? template.tags[0] : (template.category || 'Default')
-                    const categoryLabel = template.isDefault ? 'Default' : firstTag
-                    const isDefault = template.isDefault === true
+                    <h3 className="text-lg font-semibold text-navy-900 mb-2">No prompts found</h3>
+                    <p className="text-slate-500 max-w-sm mx-auto">
+                        {searchQuery ? `No results for "${searchQuery}"` : "Get started by creating your first prompt template."}
+                    </p>
+                    {canDo(ACTIONS.CREATE_PROMPT) && !searchQuery && (
+                        <PrimaryButton onClick={handleCreate} className="mt-6">
+                            Create Prompt
+                        </PrimaryButton>
+                    )}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    {sortedTemplates.map(template => {
+                        const status = getStatusConfig(template.status)
+                        const { role, goal, constraints } = parsePromptContent(template.prompt)
+                        const firstTag = template.tags && template.tags.length > 0 ? template.tags[0] : (template.category || 'Default')
+                        const categoryLabel = template.isDefault ? 'Default' : firstTag
+                        const isDefault = template.isDefault === true
 
-                    return (
-                        <div
-                            key={template.id}
-                            onClick={() => handleEdit(template)}
-                            style={{
-                                backgroundColor: 'white',
-                                borderRadius: '16px',
-                                border: isDefault ? '2px solid hsl(220, 13%, 70%)' : '1px solid hsl(220, 13%, 91%)',
-                                padding: '20px',
-                                position: 'relative',
-                                cursor: 'pointer',
-                                minHeight: '280px',
-                                display: 'flex',
-                                flexDirection: 'column'
-                            }}
-                            className="shadow-sm hover:shadow-md transition-shadow"
-                        >
-                            {/* Header: Category + Menu */}
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                marginBottom: '12px'
-                            }}>
-                                <span style={{
-                                    display: 'inline-block',
-                                    padding: '4px 12px',
-                                    borderRadius: '9999px',
-                                    fontSize: '12px',
-                                    fontWeight: 500,
-                                    backgroundColor: 'hsl(220, 14%, 96%)',
-                                    color: 'hsl(220, 9%, 46%)'
-                                }}>
-                                    {categoryLabel}
-                                </span>
+                        return (
+                            <Card
+                                key={template.id}
+                                className={`group flex flex-col min-h-[280px] transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer relative overflow-hidden ${isDefault ? 'border-primary/20 ring-1 ring-primary/5 bg-primary/[0.02]' : 'hover:border-primary/20'
+                                    }`}
+                            >
+                                <div onClick={() => handleEdit(template)} className="flex-1 flex flex-col">
+                                    {/* Card Header */}
+                                    <div className="flex items-start justify-between mb-4">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${isDefault ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500'
+                                            }`}>
+                                            {categoryLabel}
+                                        </span>
 
-                                {/* Menu - show Pin for default, three-dot menu for others */}
-                                <div style={{ position: 'relative' }} data-menu>
-                                    {isDefault ? (
-                                        <div
-                                            style={{
-                                                width: '32px',
-                                                height: '32px',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: '#FF0084'
-                                            }}
-                                            title="Default Template"
-                                        >
-                                            <Pin style={{ width: '16px', height: '16px' }} />
+                                        <div className="relative" data-menu>
+                                            {isDefault ? (
+                                                <div className="text-primary p-1 bg-primary/5 rounded-md" title="Default Template">
+                                                    <Pin className="w-4 h-4 text-primary fill-primary/20" />
+                                                </div>
+                                            ) : (
+                                                <IconButton
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setOpenMenu(openMenu === template.id ? null : template.id)
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <MoreHorizontal className="w-4 h-4" />
+                                                </IconButton>
+                                            )}
+
+                                            {openMenu === template.id && (
+                                                <div className="absolute right-0 top-full mt-2 w-36 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleCopy(template)
+                                                        }}
+                                                        className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50 text-slate-600 transition-colors"
+                                                    >
+                                                        <Copy className="w-4 h-4" />
+                                                        Copy
+                                                    </button>
+                                                    {canDo(ACTIONS.EDIT_PROMPT) && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleEdit(template)
+                                                            }}
+                                                            className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50 text-slate-600 transition-colors"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                    {canDo(ACTIONS.DELETE_PROMPT) && !isDefault && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setDeleteConfirm(template.id)
+                                                                setOpenMenu(null)
+                                                            }}
+                                                            className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-red-50 text-red-600 transition-colors"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                            Delete
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    ) : (
-                                        <IconButton
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setOpenMenu(openMenu === template.id ? null : template.id)
-                                            }}
-                                            style={{ color: 'hsl(220, 9%, 46%)' }}
-                                        >
-                                            <MoreHorizontal style={{ width: '16px', height: '16px' }} />
-                                        </IconButton>
-                                    )}
+                                    </div>
 
-                                    {openMenu === template.id && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            right: 0,
-                                            top: '100%',
-                                            marginTop: '4px',
-                                            backgroundColor: 'white',
-                                            border: '1px solid hsl(220, 13%, 91%)',
-                                            borderRadius: '12px',
-                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                            padding: '4px',
-                                            minWidth: '140px',
-                                            zIndex: 10
-                                        }}>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    handleCopy(template)
-                                                }}
-                                                className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-slate-50 transition-colors text-slate-700"
+                                    {/* Card Content */}
+                                    <h3 className="text-base font-bold text-navy-900 mb-3 line-clamp-1 group-hover:text-primary transition-colors">
+                                        {template.name}
+                                    </h3>
+
+                                    <div className="space-y-2 mb-4 flex-1">
+                                        {role && (
+                                            <p className="text-xs text-slate-500 line-clamp-1">
+                                                <span className="font-semibold text-slate-700">Role:</span> {role}
+                                            </p>
+                                        )}
+                                        {goal && (
+                                            <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed">
+                                                {role ? <><span className="font-semibold text-slate-700">Goal:</span> {goal}</> : goal}
+                                            </p>
+                                        )}
+                                        {constraints && (
+                                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                                                <span className="font-semibold text-slate-700">Constraints:</span> {constraints}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Card Footer */}
+                                    <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className="w-2 h-2 rounded-full"
+                                                style={{ backgroundColor: status.color }} // Keeping inline for dynamic color from config
+                                            />
+                                            <span
+                                                className="text-xs font-semibold"
+                                                style={{ color: status.color }} // Keeping inline for dynamic color from config
                                             >
-                                                <Copy className="w-4 h-4" />
-                                                Copy
-                                            </button>
-                                            {canDo(ACTIONS.EDIT_PROMPT) && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleEdit(template)
-                                                    }}
-                                                    className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-slate-50 transition-colors text-slate-700"
-                                                >
-                                                    <Pencil className="w-4 h-4" />
-                                                    Edit
-                                                </button>
-                                            )}
-                                            {canDo(ACTIONS.DELETE_PROMPT) && !isDefault && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setDeleteConfirm(template.id)
-                                                        setOpenMenu(null)
-                                                    }}
-                                                    className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-red-50 transition-colors text-red-600"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                    Delete
-                                                </button>
-                                            )}
+                                                {status.label}
+                                            </span>
                                         </div>
-                                    )}
+                                        {isDefault && <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Default</span>}
+                                    </div>
                                 </div>
-                            </div>
-
-                            {/* Title */}
-                            <h3 style={{
-                                fontSize: '16px',
-                                fontWeight: 600,
-                                color: 'hsl(222, 47%, 11%)',
-                                marginBottom: '12px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                            }}>
-                                {template.name}
-                            </h3>
-
-                            {/* Content Preview - flex-grow to fill space */}
-                            <div style={{ marginBottom: '16px', flex: 1 }}>
-                                {role && (
-                                    <p style={{
-                                        fontSize: '13px',
-                                        color: 'hsl(220, 9%, 46%)',
-                                        marginBottom: '6px',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap'
-                                    }}>
-                                        <span style={{ fontWeight: 500 }}>Role:</span> {role}
-                                    </p>
-                                )}
-                                {goal && (
-                                    <p style={{
-                                        fontSize: '13px',
-                                        color: 'hsl(220, 9%, 46%)',
-                                        marginBottom: '6px',
-                                        display: '-webkit-box',
-                                        WebkitLineClamp: 3,
-                                        WebkitBoxOrient: 'vertical',
-                                        overflow: 'hidden',
-                                        lineHeight: '1.5'
-                                    }}>
-                                        {role ? <><span style={{ fontWeight: 500 }}>Goal:</span> {goal}</> : goal}
-                                    </p>
-                                )}
-                                {constraints && (
-                                    <p style={{
-                                        fontSize: '13px',
-                                        color: 'hsl(220, 9%, 46%)',
-                                        display: '-webkit-box',
-                                        WebkitLineClamp: 2,
-                                        WebkitBoxOrient: 'vertical',
-                                        overflow: 'hidden',
-                                        lineHeight: '1.5'
-                                    }}>
-                                        <span style={{ fontWeight: 500 }}>Constraints:</span> {constraints}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Status - at bottom */}
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                marginTop: 'auto'
-                            }}>
-                                <span style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    backgroundColor: status.color
-                                }} />
-                                <span style={{
-                                    fontSize: '13px',
-                                    color: status.color,
-                                    fontWeight: 500
-                                }}>
-                                    {status.label}
-                                </span>
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-
-            {/* Empty State */}
-            {
-                filteredTemplates.length === 0 && !canDo(ACTIONS.CREATE_PROMPT) && (
-                    <div style={{
-                        padding: '64px',
-                        textAlign: 'center',
-                        border: '2px dashed hsl(220, 13%, 91%)',
-                        borderRadius: '16px'
-                    }}>
-                        <Search style={{
-                            width: '48px',
-                            height: '48px',
-                            color: 'hsl(220, 9%, 46%)',
-                            margin: '0 auto 16px'
-                        }} />
-                        <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
-                            No prompts found
-                        </h3>
-                        <p style={{ fontSize: '14px', color: 'hsl(220, 9%, 46%)' }}>
-                            {searchQuery ? `No results for "${searchQuery}"` : "No prompt templates available."}
-                        </p>
-                    </div>
-                )
-            }
+                            </Card>
+                        )
+                    })}
+                </div>
+            )}
 
             {/* Dialog */}
             <PromptDetailDialog
@@ -495,6 +343,6 @@ export default function PromptLibrary() {
                 confirmLabel="Delete"
                 variant="destructive"
             />
-        </div >
+        </PageContainer>
     )
 }

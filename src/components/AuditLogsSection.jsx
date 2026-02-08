@@ -3,7 +3,7 @@ import { useState, useEffect } from "react"
 import { ScrollText, ChevronRight, Filter, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/DataTable"
-import { getAllAuditLogs, formatAction, formatRelativeTime } from "@/api/pocketbase/audit"
+import { getAllAuditLogs, formatAction, formatRelativeTime } from "@/api/firebase"
 import { toast } from "sonner"
 
 export default function AuditLogsSection() {

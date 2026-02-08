@@ -1,0 +1,370 @@
+// services/firebase/projects.js
+import { db } from '../../lib/firebase';
+import {
+    collection,
+    doc,
+    getDocs,
+    getDoc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    where,
+    orderBy,
+    serverTimestamp,
+    writeBatch,
+    collectionGroup
+} from 'firebase/firestore';
+
+const COLLECTION = 'projects';
+
+// ==========================================
+// PROJECTS
+// ==========================================
+
+export async function getProjects() {
+    try {
+        const q = query(collection(db, COLLECTION), orderBy('updatedAt', 'desc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error fetching projects:', error);
+        return [];
+    }
+}
+
+export async function getProject(projectId) {
+    try {
+        const docRef = doc(db, COLLECTION, projectId);
+        const snapshot = await getDoc(docRef);
+        if (!snapshot.exists()) return null;
+        return { id: snapshot.id, ...snapshot.data() };
+    } catch (error) {
+        console.error('Error fetching project:', error);
+        return null;
+    }
+}
+
+export async function createProject(projectData) {
+    try {
+        const docRef = await addDoc(collection(db, COLLECTION), {
+            ...projectData,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            status: projectData.status || 'draft'
+        });
+        return {
+            id: docRef.id,
+            ...projectData,
+            status: projectData.status || 'draft',
+            createdAt: new Date().toISOString(), // Optimistic return
+            updatedAt: new Date().toISOString()
+        };
+    } catch (error) {
+        console.error('Error creating project:', error);
+        throw error;
+    }
+}
+
+export async function updateProject(projectId, updates) {
+    try {
+        const docRef = doc(db, COLLECTION, projectId);
+        await updateDoc(docRef, {
+            ...updates,
+            updatedAt: serverTimestamp()
+        });
+    } catch (error) {
+        console.error('Error updating project:', error);
+        throw error;
+    }
+}
+
+export async function deleteProject(projectId) {
+    try {
+        await deleteDoc(doc(db, COLLECTION, projectId));
+    } catch (error) {
+        console.error('Error deleting project:', error);
+        throw error;
+    }
+}
+
+// ==========================================
+// PROJECT PAGES
+// ==========================================
+
+export async function getProjectPages(projectId) {
+    try {
+        const q = query(
+            collection(db, COLLECTION, projectId, 'pages'),
+            orderBy('order', 'asc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error fetching project pages:', error);
+        return [];
+    }
+}
+
+export async function addProjectPage(projectId, pageData) {
+    try {
+        const pages = await getProjectPages(projectId);
+        const order = pages.length;
+
+        const docRef = await addDoc(collection(db, COLLECTION, projectId, 'pages'), {
+            ...pageData,
+            project: projectId,
+            order,
+            createdAt: serverTimestamp()
+        });
+        return { id: docRef.id, ...pageData, order };
+    } catch (error) {
+        console.error('Error creating page:', error);
+        throw error;
+    }
+}
+
+export async function deleteProjectPage(projectId, pageId) {
+    try {
+        // Delete page doc 
+        // Note: Subcollections (rows) are NOT automatically deleted in Firestore client SDK.
+        // We manually delete rows associated with this page.
+        const rows = await getPageRows(projectId, pageId);
+        const batch = writeBatch(db);
+        rows.forEach(row => {
+            const rowRef = doc(db, COLLECTION, projectId, 'rows', row.id);
+            batch.delete(rowRef);
+        });
+        await batch.commit();
+
+        await deleteDoc(doc(db, COLLECTION, projectId, 'pages', pageId));
+    } catch (error) {
+        console.error('Error deleting page:', error);
+        throw error;
+    }
+}
+
+export async function renameProjectPage(projectId, pageId, newName) {
+    try {
+        const pageRef = doc(db, COLLECTION, projectId, 'pages', pageId);
+        await updateDoc(pageRef, { name: newName });
+        await updateProject(projectId, {}); // Touch lastUpdated
+    } catch (error) {
+        console.error('Error renaming page:', error);
+        throw error;
+    }
+}
+
+// ==========================================
+// PAGE ROWS
+// ==========================================
+
+export async function getPageRows(projectId, pageId) {
+    try {
+        const q = query(
+            collection(db, COLLECTION, projectId, 'rows'),
+            where('pageId', '==', pageId),
+            orderBy('order', 'asc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error fetching page rows:', error);
+        return [];
+    }
+}
+
+export async function addPageRows(projectId, pageId, rows) {
+    try {
+        const batch = writeBatch(db);
+        const results = [];
+
+        rows.forEach((row, i) => {
+            const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
+            const rowData = {
+                ...row,
+                project: projectId,
+                pageId: pageId,
+                order: i,
+                status: row.status || 'draft',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            };
+            batch.set(rowRef, rowData);
+            results.push({ id: rowRef.id, ...rowData });
+        });
+
+        await batch.commit();
+        await updateProject(projectId, {});
+        return results;
+    } catch (error) {
+        console.error('Error adding rows:', error);
+        throw error;
+    }
+}
+
+export async function updatePageRow(projectId, pageId, rowId, updates) {
+    try {
+        const rowRef = doc(db, COLLECTION, projectId, 'rows', rowId);
+        await updateDoc(rowRef, {
+            ...updates,
+            updatedAt: serverTimestamp()
+        });
+        await updateProject(projectId, {});
+    } catch (error) {
+        console.error('Error updating row:', error);
+        throw error;
+    }
+}
+
+
+// ==========================================
+// LEGACY PROJECT ROWS (flat structure)
+// ==========================================
+
+export async function getProjectRows(projectId) {
+    try {
+        // Legacy rows have empty pageId or missing pageId
+        const q = query(
+            collection(db, COLLECTION, projectId, 'rows'),
+            where('pageId', '==', ''),
+            orderBy('order', 'asc')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error fetching project rows:', error);
+        return [];
+    }
+}
+
+export async function addProjectRows(projectId, rows) {
+    return addPageRows(projectId, '', rows);
+}
+
+export async function updateProjectRow(projectId, rowId, updates) {
+    const rowRef = doc(db, COLLECTION, projectId, 'rows', rowId);
+    await updateDoc(rowRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+    });
+    await updateProject(projectId, {});
+}
+
+export async function updateProjectRows(projectId, rowUpdates) {
+    try {
+        const batch = writeBatch(db);
+        rowUpdates.forEach(({ id, changes }) => {
+            const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+            batch.update(rowRef, {
+                ...changes,
+                updatedAt: serverTimestamp()
+            });
+        });
+        await batch.commit();
+        await updateProject(projectId, {});
+    } catch (error) {
+        console.error('Error updating rows:', error);
+        throw error;
+    }
+}
+
+export async function deletePageRows(projectId, pageId, rowIds) {
+    try {
+        const batch = writeBatch(db);
+        rowIds.forEach(id => {
+            const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+            batch.delete(rowRef);
+        });
+        await batch.commit();
+        await updateProject(projectId, {});
+    } catch (error) {
+        console.error('Error deleting page rows:', error);
+        throw error;
+    }
+}
+
+export async function deleteProjectRows(projectId, rowIds) {
+    return deletePageRows(projectId, '', rowIds);
+}
+
+/**
+ * Get all rows with specific statuses (for Submissions view)
+ * Uses Collection Group Query on 'rows' collection
+ */
+export async function getUserSubmissions(userId) {
+    try {
+        const rowsQuery = query(
+            collectionGroup(db, 'rows'),
+            where('status', 'in', ['review', 'approved', 'changes']),
+            orderBy('updatedAt', 'desc')
+        );
+
+        const querySnapshot = await getDocs(rowsQuery);
+        const submissions = [];
+
+        // We need to fetch project and page details manually since Firestore 
+        // doesn't support 'expand' like PocketBase
+        // Optimisation: Cache project/page data to avoid redundant fetches
+        const projectCache = {};
+        const pageCache = {};
+
+        for (const docSnap of querySnapshot.docs) {
+            const rowData = { id: docSnap.id, ...docSnap.data() };
+            // rowData.ref.parent.parent is the parent doc (Page or Project)
+            // But getting parent data from ref requires a fetch
+
+            // Construct parent paths
+            const parentCollection = docSnap.ref.parent; // 'rows'
+            const parentDoc = parentCollection.parent; // Page or Project doc ref
+
+            if (parentDoc) {
+                // If nested in Page: projects/{pid}/pages/{pageId}/rows/{rowId}
+                // parentDoc is the Page. parentDoc.parent.parent is the Project.
+                if (parentDoc.parent.id === 'pages') {
+                    const pageId = parentDoc.id;
+                    const projectId = parentDoc.parent.parent.id;
+
+                    // Fetch Page Name
+                    if (!pageCache[pageId]) {
+                        const pageSnap = await getDoc(parentDoc);
+                        pageCache[pageId] = pageSnap.exists() ? pageSnap.data() : { name: 'Unknown Page' };
+                    }
+
+                    // Fetch Project Name
+                    if (!projectCache[projectId]) {
+                        const projectSnap = await getDoc(parentDoc.parent.parent);
+                        projectCache[projectId] = projectSnap.exists() ? projectSnap.data() : { name: 'Unknown Project' };
+                    }
+
+                    // Simulated 'expand' property
+                    rowData.expand = {
+                        project: projectCache[projectId],
+                        page: pageCache[pageId]
+                    };
+                }
+                // If direct in Project (Legacy): projects/{pid}/rows/{rowId}
+                else if (parentDoc.parent.id === 'projects') {
+                    const projectId = parentDoc.id;
+
+                    if (!projectCache[projectId]) {
+                        const projectSnap = await getDoc(parentDoc);
+                        projectCache[projectId] = projectSnap.exists() ? projectSnap.data() : { name: 'Unknown Project' };
+                    }
+
+                    rowData.expand = {
+                        project: projectCache[projectId],
+                        page: null
+                    };
+                }
+            }
+
+            submissions.push(rowData);
+        }
+
+        return submissions;
+    } catch (error) {
+        console.error("Error fetching submissions:", error);
+        throw error;
+    }
+}

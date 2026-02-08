@@ -9,6 +9,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { useAuth } from "@/App"
+import { updateUserRole, ROLES } from "@/api/firebase/roles"
 
 import {
   Avatar,
@@ -35,7 +36,7 @@ export function NavUser({
   user,
 }) {
   const { state } = useSidebar()
-  const { signOut } = useAuth()
+  const { signOut, role, getRoleLabel, getRoleColor } = useAuth()
 
   const handleLogout = async () => {
     await signOut()
@@ -57,7 +58,12 @@ export function NavUser({
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold text-sidebar-foreground">{user.name}</span>
+                <span className="truncate font-semibold text-sidebar-foreground flex items-center gap-2">
+                  {user.name}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getRoleColor(role)}`}>
+                    {getRoleLabel(role)}
+                  </span>
+                </span>
                 <span className="truncate text-xs text-sidebar-foreground/70">{user.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4 text-sidebar-foreground/50" />
@@ -76,7 +82,12 @@ export function NavUser({
                   <AvatarFallback className="rounded-lg">CN</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user.name}</span>
+                  <span className="truncate font-semibold flex items-center gap-2">
+                    {user.name}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getRoleColor(role)}`}>
+                      {getRoleLabel(role)}
+                    </span>
+                  </span>
                   <span className="truncate text-xs">{user.email}</span>
                 </div>
               </div>
@@ -101,6 +112,22 @@ export function NavUser({
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>
+
+            {/* DEV TOOL: Promote self to Manager */}
+            {role !== 'manager' && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={async () => {
+                  if (confirm('Promote self to Manager? This will refresh the page.')) {
+                    await updateUserRole(user.id, 'manager');
+                    window.location.reload();
+                  }
+                }}>
+                  <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
+                  Dev: Make Manager
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

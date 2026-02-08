@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react"
-import { FileSpreadsheet, Download, Square, CheckSquare, Loader2, X, Upload, Plus, Filter, Check, Search, Send, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { FileSpreadsheet, Download, Square, CheckSquare, Loader2, X, Upload, Plus, Filter, Check, Search, Send, MoreHorizontal, Pencil, Trash2, FileText, Presentation } from "lucide-react"
 import { PageHeader, SearchInput } from "@/components/ui/common"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { COLORS, PillButton, TableActionButton, PrimaryButton } from "@/components/ui/shared"
+import { COLORS, PillButton, TableActionButton, PrimaryButton, PageContainer, Card, IconButton } from "@/components/ui/shared"
 import { useProjects } from "@/context/ProjectContext"
 import { usePrompts } from "@/context/PromptContext"
 import { useGlossary } from "@/context/GlossaryContext"
@@ -12,6 +12,7 @@ import { useApprovalNotifications } from "@/hooks/useApprovalNotifications"
 import { useAuth } from "@/App"
 import * as XLSX from "xlsx"
 import { parseExcelFile } from "@/lib/excel"
+import { exportToDocx, exportToPptx } from "@/lib/document"
 import { getAI } from "@/api/ai"
 import { toast } from "sonner"
 import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
@@ -27,6 +28,7 @@ import { getStatusConfig, LANGUAGES } from "@/lib/constants"
 
 import { ConfirmDialog, ProjectSettingsDialog } from "@/components/dialogs"
 import { GlossaryHighlighter } from "@/components/ui/GlossaryHighlighter"
+import { ExportMenu } from "@/components/project"
 import Pagination from "@/components/Pagination"
 
 
@@ -242,7 +244,7 @@ export default function ProjectView({ projectId }) {
     const handleExport = () => {
         // Build export data dynamically based on target languages
         const exportData = allRows.map(row => {
-            const rowData = { 'English': row.en }
+            const rowData = { 'English': row.en || row.text || '' }
             // Add only selected target languages
             targetLanguages.forEach(lang => {
                 const label = LANGUAGES[lang]?.nativeLabel || LANGUAGES[lang]?.label || lang
@@ -272,6 +274,52 @@ export default function ProjectView({ projectId }) {
         XLSX.writeFile(wb, `${project.name}_export.xlsx`)
     }
 
+    const handleExportDocx = async (targetLang) => {
+        // Export as bilingual Word document for a specific target language
+        const exportRows = allRows.map(row => ({
+            en: row.en || row.text || '',
+            translations: {
+                [targetLang]: {
+                    text: row[targetLang] || row.translations?.[targetLang]?.text || ''
+                }
+            }
+        }))
+
+        try {
+            await exportToDocx(exportRows, `${project.name}_${targetLang}`, {
+                targetLanguage: targetLang,
+                format: 'bilingual',
+                title: `${project.name} - Translations`
+            })
+            toast.success(`Exported to ${project.name}_${targetLang}.docx`)
+        } catch (error) {
+            console.error('DOCX export error:', error)
+            toast.error('Failed to export Word document')
+        }
+    }
+
+    const handleExportPptx = async (targetLang) => {
+        // Export as bilingual PowerPoint presentation
+        const exportRows = allRows.map(row => ({
+            en: row.en || row.text || '',
+            translations: {
+                [targetLang]: {
+                    text: row[targetLang] || row.translations?.[targetLang]?.text || ''
+                }
+            }
+        }))
+
+        try {
+            await exportToPptx(exportRows, `${project.name}_${targetLang}`, {
+                targetLanguage: targetLang
+            })
+            toast.success(`Exported to ${project.name}_${targetLang}.pptx`)
+        } catch (error) {
+            console.error('PPTX export error:', error)
+            toast.error('Failed to export PowerPoint')
+        }
+    }
+
     const handleImportSheet = async (event) => {
         const file = event.target.files?.[0]
         if (!file) return
@@ -281,9 +329,9 @@ export default function ProjectView({ projectId }) {
             const parsedData = await parseExcelFile(file)
             for (const [sheetName, sheetData] of Object.entries(parsedData)) {
                 const newRows = sheetData.entries.map((entry, idx) => ({
-                    en: entry.english || '',
-                    my: entry.malay || '',
-                    zh: entry.chinese || '',
+                    en: entry.english || entry.en || '',
+                    my: entry.malay || entry.my || '',
+                    zh: entry.chinese || entry.zh || '',
                     status: 'draft',
                 })).filter(row => row.en)
 
@@ -520,12 +568,12 @@ export default function ProjectView({ projectId }) {
             if (hasSelection) {
                 // Selected rows - override existing translations
                 rowsToTranslate = rows.filter(row => selectedRowIds.has(row.id))
-                console.log(`🎯 [Translate] Translating ${rowsToTranslate.length} selected rows (override mode)`)
+                console.log(`[Translate] Translating ${rowsToTranslate.length} selected rows (override mode)`)
                 toast.info(`Translating ${rowsToTranslate.length} selected rows...`)
             } else {
                 // No selection - translate only empty cells
                 rowsToTranslate = rows.filter(row => !row.my?.trim() || !row.zh?.trim())
-                console.log(`🎯 [Translate] Translating ${rowsToTranslate.length} rows with empty translations`)
+                console.log(`[Translate] Translating ${rowsToTranslate.length} rows with empty translations`)
                 if (rowsToTranslate.length === 0) {
                     toast.info('All rows already have translations!')
                     setIsTranslating(false)
@@ -554,20 +602,20 @@ export default function ProjectView({ projectId }) {
                     const allSame = rowPromptIds.every(id => id === firstRowPromptId)
                     if (allSame) {
                         effectivePromptId = firstRowPromptId
-                        console.log('🔍 [DEBUG] Using per-row promptId:', effectivePromptId)
+                        console.log('[DEBUG] Using per-row promptId:', effectivePromptId)
                     } else {
-                        console.log('⚠️ [DEBUG] Selected rows have different promptIds, using first:', firstRowPromptId)
+                        console.log('[DEBUG] Selected rows have different promptIds, using first:', firstRowPromptId)
                         effectivePromptId = firstRowPromptId
                     }
                 }
             }
 
-            console.log('🔍 [DEBUG] Effective promptId:', effectivePromptId)
-            console.log('🔍 [DEBUG] All templates:', templates.map(t => ({ id: t.id, name: t.name, isDefault: t.isDefault, status: t.status })))
+            console.log('[DEBUG] Effective promptId:', effectivePromptId)
+            console.log('[DEBUG] All templates:', templates.map(t => ({ id: t.id, name: t.name, isDefault: t.isDefault, status: t.status })))
 
             // Get base default template (MANDATORY - no fallback)
             const baseDefaultTemplate = defaultTemplate || publishedTemplates[0]
-            
+
             if (!baseDefaultTemplate) {
                 toast.error("No default template found. Please create one in Prompt Library.")
                 setIsTranslating(false)
@@ -584,7 +632,7 @@ export default function ProjectView({ projectId }) {
                 rowsByPromptId[promptKey].push(row)
             }
 
-            console.log('🔍 [DEBUG] Row groups by promptId:', Object.keys(rowsByPromptId).map(k => `${k}: ${rowsByPromptId[k].length} rows`))
+            console.log('[DEBUG] Row groups by promptId:', Object.keys(rowsByPromptId).map(k => `${k}: ${rowsByPromptId[k].length} rows`))
 
             // Translate each group with its respective prompt
             let totalSuccessCount = 0
@@ -594,7 +642,7 @@ export default function ProjectView({ projectId }) {
 
                 // Get user-selected template for this group
                 const selectedTemplate = effectivePromptId ? publishedTemplates.find(t => t.id === effectivePromptId) : null
-                console.log(`🔍 [DEBUG] Group "${promptKey}": ${groupRows.length} rows, template:`, selectedTemplate?.name || 'Default only')
+                console.log(`[DEBUG] Group "${promptKey}": ${groupRows.length} rows, template:`, selectedTemplate?.name || 'Default only')
 
                 // Merge prompts: Default base (ALWAYS) + Custom additions (if selected and different)
                 let mergedPrompt = baseDefaultTemplate.prompt || ''
@@ -612,12 +660,12 @@ export default function ProjectView({ projectId }) {
                     prompt: mergedPrompt
                 }
 
-                console.log(`📝 [Translate] Group "${promptKey}" using template: ${templateToUse.name}`)
+                console.log(`[Translate] Group "${promptKey}" using template: ${templateToUse.name}`)
 
                 // Call translation API for this group - use project's target languages
                 const ai = getAI();
                 const results = await ai.generateBatch(
-                    groupRows.map(row => ({ id: row.id, text: row.en || row.source_text || '', context: row.context })),
+                    groupRows.map(row => ({ id: row.id, text: row.en || row.text || row.source_text || '', context: row.context })),
                     {
                         template: templateToUse,
                         targetLanguages: targetLanguages,
@@ -653,7 +701,7 @@ export default function ProjectView({ projectId }) {
             }
 
             toast.success(`Successfully translated ${totalSuccessCount} rows!`)
-            console.log(`✅ [Translate] Completed: ${totalSuccessCount}/${rowsToTranslate.length} rows`)
+            console.log(`[Translate] Completed: ${totalSuccessCount}/${rowsToTranslate.length} rows`)
 
         } catch (error) {
             console.error('❌ [Translate] Error:', error)
@@ -686,7 +734,7 @@ export default function ProjectView({ projectId }) {
                 if (row.id === editingRowId) {
                     return (
                         <Textarea
-                            value={editingRowData?.en || ''}
+                            value={editingRowData?.en || editingRowData?.text || ''}
                             onChange={(e) => setEditingRowData(prev => ({ ...prev, en: e.target.value }))}
                             onKeyDown={handleEditKeyDown}
                             className="min-h-[80px] bg-white resize-y"
@@ -695,9 +743,9 @@ export default function ProjectView({ projectId }) {
                     )
                 }
                 return (
-                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                    <div className="whitespace-pre-wrap">
                         <GlossaryHighlighter
-                            text={row.en}
+                            text={row.en || row.text || ''}
                             language="en"
                             glossaryTerms={glossaryTerms}
                         />
@@ -727,7 +775,7 @@ export default function ProjectView({ projectId }) {
                 // Read from translations JSON first, fallback to legacy field
                 const displayText = row.translations?.[langCode]?.text || row[langCode] || ''
                 return (
-                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                    <div className="whitespace-pre-wrap">
                         <GlossaryHighlighter
                             text={displayText || '—'}
                             language={langCode}
@@ -755,14 +803,12 @@ export default function ProjectView({ projectId }) {
             render: (row) => {
                 const config = getStatusConfig(row.status)
                 return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            backgroundColor: config.color
-                        }} />
-                        <span style={{ fontSize: '14px', color: 'hsl(220, 9%, 46%)' }}>
+                    <div className="flex items-center gap-2">
+                        <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: config.color }}
+                        />
+                        <span className="text-sm text-slate-500 font-medium">
                             {config.label}
                         </span>
                     </div>
@@ -781,15 +827,7 @@ export default function ProjectView({ projectId }) {
                 if (!remarkText.trim()) return <span style={{ color: 'hsl(220, 13%, 91%)' }}>—</span>
 
                 return (
-                    <div style={{
-                        fontSize: '13px',
-                        color: row.status === 'changes' ? 'hsl(0, 84%, 60%)' : 'hsl(220, 9%, 46%)',
-                        fontStyle: 'italic',
-                        maxWidth: '200px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                    }} title={remarkText}>
+                    <div className="text-sm text-slate-500 italic truncate max-w-[200px]" title={remarkText}>
                         {remarkText}
                     </div>
                 )
@@ -805,7 +843,7 @@ export default function ProjectView({ projectId }) {
                     templates={templates}
                     onSelect={(promptId) => {
                         updateProjectRow(id, row.id, { promptId })
-                        console.log(`📝 [Prompt] Row ${row.id} → ${promptId || 'default'}`)
+                        console.log(`[Prompt] Row ${row.id} → ${promptId || 'default'}`)
                     }}
                 />
             )
@@ -837,37 +875,25 @@ export default function ProjectView({ projectId }) {
                 return (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <button
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '24px',
-                                    height: '24px',
-                                    border: 'none',
-                                    backgroundColor: 'transparent',
-                                    cursor: 'pointer',
-                                    borderRadius: '4px'
-                                }}
-                            >
-                                <MoreHorizontal style={{ width: '16px', height: '16px', color: 'hsl(220, 9%, 46%)' }} />
-                            </button>
+                            <IconButton>
+                                <MoreHorizontal className="w-4 h-4 text-slate-500" />
+                            </IconButton>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" style={{ minWidth: '120px' }}>
+                        <DropdownMenuContent align="end" className="min-w-[140px]">
                             <DropdownMenuItem
                                 onClick={() => handleStartEdit(row)}
-                                style={{ cursor: 'pointer' }}
+                                className="cursor-pointer"
                             >
-                                <Pencil style={{ width: '14px', height: '14px', marginRight: '8px' }} />
+                                <Pencil className="w-3.5 h-3.5 mr-2 text-slate-500" />
                                 Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() => {
                                     setDeleteConfirm({ type: 'single', id: row.id, count: 1 })
                                 }}
-                                style={{ cursor: 'pointer', color: 'hsl(0, 84%, 60%)' }}
+                                className="cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50"
                             >
-                                <Trash2 style={{ width: '14px', height: '14px', marginRight: '8px' }} />
+                                <Trash2 className="w-3.5 h-3.5 mr-2" />
                                 Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -878,31 +904,25 @@ export default function ProjectView({ projectId }) {
     ]
 
     return (
-        <div className="w-full pb-10">
+        <PageContainer>
             <input
                 type="file"
                 ref={fileInputRef}
                 onChange={handleImportSheet}
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.xls,.csv,.docx,.pptx"
                 className="hidden"
             />
 
             {/* Page Title - Static */}
-            <div className="flex items-center gap-2 mb-1">
-                <h1
-                    className="text-2xl font-bold tracking-tight text-foreground"
-                >
-                    {currentTitle}
-                </h1>
-            </div>
+            <PageHeader description="Manage your project translations and pages">{currentTitle}</PageHeader>
 
             {/* Action Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0' }}>
-                <span style={{ fontSize: '14px', color: 'hsl(220, 9%, 46%)' }}>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4 min-h-[80px]">
+                <span className="text-sm font-medium text-slate-500">
                     {selectedCount > 0 ? `${selectedCount} row(s) selected` : `${rows.length} row(s)`}
                 </span>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="flex flex-wrap items-center gap-2">
                     {/* Search */}
                     <SearchInput
                         value={searchQuery}
@@ -911,7 +931,7 @@ export default function ProjectView({ projectId }) {
                             setCurrentPage(1)
                         }}
                         placeholder="Search translations..."
-                        width="200px"
+                        className="w-[200px]"
                     />
 
                     {/* Filter - Available when rows exist and NO selection */}
@@ -921,7 +941,6 @@ export default function ProjectView({ projectId }) {
                                 currentPromptId={selectedPromptId}
                                 templates={templates.filter(t => t.status !== 'draft')}
                                 onSelect={setSelectedPromptId}
-                                style={{ border: '1px solid hsl(220, 13%, 91%)' }}
                             />
                             <StatusFilterDropdown
                                 currentFilter={statusFilter}
@@ -930,10 +949,6 @@ export default function ProjectView({ projectId }) {
                         </>
                     )}
 
-
-                    {/* Import - Available when NO selection and NOT fully approved (unless we allow adding to approved?) Requirements say 'Import' on Approved too. */}
-                    {/* Requirements: Approved -> Search, Filter, Import, Export. So Import is always available except Selection? */}
-                    {/* Matrix says: Empty(Import), Pending(Import), Translated(Import), Approved(Import). Selection(No Import). */}
                     {/* Import */}
                     {!hasSelection && (
                         <PillButton
@@ -941,7 +956,7 @@ export default function ProjectView({ projectId }) {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isImporting}
                         >
-                            <Upload style={{ width: '16px', height: '16px' }} /> Import
+                            <Upload className="w-3.5 h-3.5 mr-2" /> Import
                         </PillButton>
                     )}
 
@@ -951,35 +966,35 @@ export default function ProjectView({ projectId }) {
                         onClick={() => setIsSettingsOpen(true)}
                     />
 
-                    {/* Translate Selected (if not approved/filled?) - Keeping existing logic "Translate {N}" */}
                     {/* Selection Actions */}
                     {hasSelection && (
                         <>
                             <PillButton
                                 variant="outline"
                                 onClick={handleBulkDelete}
+                                className="text-red-600 hover:bg-red-50 border-red-200"
                             >
-                                <Trash2 style={{ width: '16px', height: '16px' }} /> Delete {selectedCount}
+                                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete {selectedCount}
                             </PillButton>
 
                             {/* Translate - Always available when selected (not all approved) */}
                             {!allApproved && (
                                 <PrimaryButton
-                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium }}
+                                    className="h-8 text-xs px-4 bg-blue-600 hover:bg-blue-700"
                                     onClick={handleTranslateAll}
                                     disabled={isTranslating}
                                 >
-                                    <span style={{ fontSize: '14px' }}>✦</span> Translate {selectedCount}
+                                    <span className="text-sm mr-1">✦</span> Translate {selectedCount}
                                 </PrimaryButton>
                             )}
 
                             {/* Send to Review - Only if selected rows are filled (RIGHTMOST) */}
                             {selectionFilled && (
                                 <PrimaryButton
-                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
+                                    className="h-8 text-xs px-4 ml-2"
                                     onClick={handleSendForReview}
                                 >
-                                    <Send style={{ width: '14px', height: '14px' }} /> Send {selectedCount} to Review
+                                    <Send className="w-3.5 h-3.5 mr-2" /> Send {selectedCount} to Review
                                 </PrimaryButton>
                             )}
                         </>
@@ -987,26 +1002,26 @@ export default function ProjectView({ projectId }) {
 
                     {/* Export - Available when NO selection and ALL FILLED (but NOT all Approved, avoid duplicate) */}
                     {hasFilteredRows && !hasSelection && allFilled && !allApproved && (
-                        <PillButton
-                            variant="outline"
-                            style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
-                            onClick={handleExport}
-                        >
-                            <Download style={{ width: '14px', height: '14px' }} /> Export
-                        </PillButton>
+                        <ExportMenu
+                            targetLanguages={targetLanguages}
+                            onExportExcel={handleExport}
+                            onExportDocx={handleExportDocx}
+                            onExportPptx={handleExportPptx}
+                            className="ml-2"
+                        />
                     )}
 
                     {/* Check if we need Translate button (No Selection, Not all translated) */}
                     {hasFilteredRows && !hasSelection && !allFilled && (
                         <PrimaryButton
-                            style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium, marginLeft: '8px' }}
+                            className="h-8 text-xs px-4 bg-blue-600 hover:bg-blue-700 ml-2"
                             onClick={handleTranslateAll}
                             disabled={isTranslating}
                         >
                             {isTranslating ? (
-                                <><Loader2 style={{ width: '14px', height: '14px', marginRight: '4px', animation: 'spin 1s linear infinite' }} /> Translating...</>
+                                <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Translating...</>
                             ) : (
-                                <><span style={{ fontSize: '14px' }}>✦</span> Translate</>
+                                <><span className="text-sm mr-1">✦</span> Translate</>
                             )}
                         </PrimaryButton>
                     )}
@@ -1014,24 +1029,22 @@ export default function ProjectView({ projectId }) {
                     {/* Send for Review (No Selection) - if translated but not approved */}
                     {hasFilteredRows && !hasSelection && allTranslated && !allApproved && (
                         <PrimaryButton
-                            style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
+                            className="h-8 text-xs px-4 ml-2"
                             onClick={handleSendForReview}
                             disabled={isTranslating}
                         >
-                            <Send style={{ width: '14px', height: '14px' }} /> Send for Review
+                            <Send className="w-3.5 h-3.5 mr-2" /> Send for Review
                         </PrimaryButton>
                     )}
 
                     {/* Case 6: Approved (All Approved) -> Export */}
                     {allApproved && (
-
-                        <PillButton
-                            variant="outline"
-                            style={{ height: '32px', fontSize: '12px', padding: '0 16px' }}
-                            onClick={handleExport}
-                        >
-                            <Download style={{ width: '16px', height: '16px' }} /> Export
-                        </PillButton>
+                        <ExportMenu
+                            targetLanguages={targetLanguages}
+                            onExportExcel={handleExport}
+                            onExportDocx={handleExportDocx}
+                            onExportPptx={handleExportPptx}
+                        />
                     )}
                 </div>
             </div>
@@ -1043,17 +1056,17 @@ export default function ProjectView({ projectId }) {
                 selectedIds={selectedRowIds}
                 onToggleSelect={(id) => toggleRowSelection(project.id, id)}
                 onToggleSelectAll={handleSelectAll}
-                onRowClick={(row) => console.log('Row clicked', row)}
+                onRowClick={(row) => { }}
                 scrollable={true}
-                getRowStyle={(row) => isRowNew(id, currentPageId, row) ? { backgroundColor: '#FFF0F7' } : {}}
+                getRowStyle={(row) => isRowNew(id, currentPageId, row) ? { backgroundColor: COLORS.primaryLightest } : {}}
             >
                 {/* Inline Add Row */}
                 {isAddingRow && (
-                    <tr style={{ borderBottom: `1px solid ${TABLE_STYLES.borderColor}`, backgroundColor: 'hsl(340, 82%, 59%, 0.03)' }}>
-                        <td style={{ width: TABLE_STYLES.checkboxColumnWidth, padding: TABLE_STYLES.headerPadding }}>
-                            <Plus style={{ width: '16px', height: '16px', color: TABLE_STYLES.primaryColor }} />
+                    <tr className="border-b border-border bg-primary/5">
+                        <td className="w-[52px] px-4 py-3 align-top">
+                            <Plus className="w-4 h-4 text-primary mx-auto" />
                         </td>
-                        <td style={{ padding: '8px 16px' }}>
+                        <td className="px-4 py-2 align-top">
                             <Textarea
                                 ref={newRowInputRef}
                                 placeholder="Enter English text..."
@@ -1065,7 +1078,7 @@ export default function ProjectView({ projectId }) {
                         </td>
                         {/* Dynamic target language inputs based on project settings */}
                         {targetLanguages.map(langCode => (
-                            <td key={langCode} style={{ padding: '8px 16px' }}>
+                            <td key={langCode} className="px-4 py-2 align-top">
                                 <Textarea
                                     placeholder={`${LANGUAGES[langCode]?.label || langCode} (optional)`}
                                     value={newRowData[langCode] || ''}
@@ -1075,53 +1088,32 @@ export default function ProjectView({ projectId }) {
                                 />
                             </td>
                         ))}
-                        <td style={{ padding: TABLE_STYLES.cellPadding }}>
-                            <span style={{ fontSize: '12px', color: TABLE_STYLES.mutedColor }}>New</span>
+                        <td className="px-4 py-3 align-top">
+                            <span className="text-xs text-muted-foreground font-medium">New</span>
                         </td>
-                        <td style={{ padding: TABLE_STYLES.cellPadding }}>
-                            <span style={{ fontSize: '12px', color: 'hsl(220, 9%, 46%)' }}>—</span>
+                        <td className="px-4 py-3 align-top">
+                            <span className="text-xs text-slate-300">—</span>
                         </td>
                     </tr>
                 )}
-                {/* Save/Cancel buttons for Add Row - Rendered as a row but might look better as actions. 
-                    Wait, Figma showing "Add new row" as a button logic. 
-                    Actually, the inputs row replaces the button, and should have save/cancel. 
-                    The previous design put Save/Cancel in the last column. 
-                    The DataTable has 6 columns (Checkbox + 5 data). 
-                    My inputs above cover 4 columns (Checkbox, En, My, Zh). 
-                    Status and Template are cols 5 and 6. 
-                    I should add cells for them to align.
-                */}
+
                 {isAddingRow && (
-                    <tr style={{ borderBottom: `1px solid ${TABLE_STYLES.borderColor}`, backgroundColor: 'transparent' }}>
-                        <td colSpan={columns.length + 1} style={{ padding: '8px 16px', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', width: '100%' }}>
+                    <tr className="border-b border-border bg-transparent">
+                        <td colSpan={columns.length + 1} className="px-4 py-2 text-right">
+                            <div className="flex gap-2 justify-end w-full">
                                 <button
                                     onClick={handleSaveNewRow}
                                     disabled={!newRowData.en.trim()}
-                                    style={{
-                                        padding: '6px 12px',
-                                        fontSize: '12px',
-                                        fontWeight: 500,
-                                        borderRadius: '6px',
-                                        border: 'none',
-                                        backgroundColor: newRowData.en.trim() ? '#FF0084' : 'hsl(220, 13%, 91%)',
-                                        color: newRowData.en.trim() ? 'white' : 'hsl(220, 9%, 46%)',
-                                        cursor: newRowData.en.trim() ? 'pointer' : 'not-allowed'
-                                    }}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${newRowData.en.trim()
+                                        ? 'bg-primary text-white border-primary hover:bg-primary/90'
+                                        : 'bg-slate-100 text-slate-400 border-transparent cursor-not-allowed'
+                                        }`}
                                 >
                                     Save
                                 </button>
                                 <button
                                     onClick={handleCancelAddRow}
-                                    style={{
-                                        padding: '6px 12px',
-                                        fontSize: '12px',
-                                        borderRadius: '6px',
-                                        border: '1px solid hsl(220, 13%, 91%)',
-                                        backgroundColor: 'white',
-                                        cursor: 'pointer'
-                                    }}
+                                    className="px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                                 >
                                     Cancel
                                 </button>
@@ -1132,24 +1124,12 @@ export default function ProjectView({ projectId }) {
                 {/* Add new row button - inside table as a row */}
                 {!isAddingRow && (
                     <tr>
-                        <td colSpan={columns.length + 1} style={{ padding: 0 }}>
+                        <td colSpan={columns.length + 1} className="p-0">
                             <button
                                 onClick={handleStartAddRow}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: TABLE_STYLES.headerPadding,
-                                    width: '100%',
-                                    fontSize: '14px',
-                                    color: 'hsl(220, 9%, 46%)',
-                                    backgroundColor: 'transparent',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    textAlign: 'left'
-                                }}
+                                className="flex items-center gap-2 px-4 py-3.5 w-full text-sm text-slate-500 hover:text-primary hover:bg-slate-50 transition-colors text-left"
                             >
-                                <Plus style={{ width: '16px', height: '16px' }} /> Add new row
+                                <Plus className="w-4 h-4" /> Add new row
                             </button>
                         </td>
                     </tr>
@@ -1201,6 +1181,6 @@ export default function ProjectView({ projectId }) {
                 confirmLabel="Add Anyway"
                 variant="default"
             />
-        </div >
+        </PageContainer>
     )
 }

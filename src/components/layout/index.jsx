@@ -1,6 +1,6 @@
 // Layout component - wraps all pages with sidebar
 import { AppSidebar } from "./app-sidebar"
-import { BookOpen, Library, Settings2, Folder, FileText, ChevronDown, PanelLeft, Sun, Moon, History, Bell, User } from "lucide-react"
+import { BookOpen, Library, Settings2, Folder, FileText, ChevronDown, PanelLeft, Sun, Moon, History, Bell, User, Sparkles } from "lucide-react"
 import {
     SidebarInset,
     SidebarProvider,
@@ -12,6 +12,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useState, useEffect } from "react"
@@ -189,6 +190,26 @@ function TopBar({ breadcrumbs }) {
                             <User className="mr-2 h-4 w-4" />
                             Log out
                         </DropdownMenuItem>
+
+                        {/* DEV TOOL: Promote self to Manager */}
+                        {role !== 'manager' && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={async () => {
+                                        if (confirm('Promote self to Manager? This will refresh the page.')) {
+                                            const { updateUserRole } = await import('@/api/firebase/roles');
+                                            await updateUserRole(user.id, 'manager');
+                                            window.location.reload();
+                                        }
+                                    }}
+                                    className="text-purple-600 cursor-pointer"
+                                >
+                                    <Sparkles className="mr-2 h-4 w-4" />
+                                    Dev: Make Manager
+                                </DropdownMenuItem>
+                            </>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

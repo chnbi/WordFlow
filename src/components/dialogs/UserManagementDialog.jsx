@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner"
 import { useAuth } from "@/App"
 import { ROLES, getRoleLabel, getRoleColor } from "@/lib/permissions"
-import { getUsers, updateUserRole } from "@/api/pocketbase"
+import { getUsers, updateUserRole } from "@/api/firebase"
 
 export default function UserManagementDialog({ open, onOpenChange }) {
     const { user: currentUser, role: currentRole } = useAuth()

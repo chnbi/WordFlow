@@ -1,14 +1,18 @@
 // Settings - User and admin settings with consistent layout
-import { User, Shield, Bell, Palette, Key, ChevronRight, Activity } from "lucide-react"
+import { User, Shield, Bell, Palette, Key, ChevronRight, Activity, Eye, EyeOff, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/App"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import ManageCategoriesDialog from "@/components/dialogs/ManageCategoriesDialog"
 import UserManagementDialog from "@/components/dialogs/UserManagementDialog"
 import ChangePasswordDialog from "@/components/dialogs/ChangePasswordDialog"
 import { toast } from "sonner"
+import { getUserApiKeys, saveUserApiKeys } from "@/api/firebase/apiKeys"
 
 import AuditLogsSection from "@/components/AuditLogsSection"
+import { PageContainer } from "@/components/ui/shared"
+
+import { PageHeader } from "@/components/ui/common"
 
 const adminSections = [
     {
@@ -36,13 +40,53 @@ export default function Settings() {
     const [isCategoryOpen, setIsCategoryOpen] = useState(false)
     const [isPasswordOpen, setIsPasswordOpen] = useState(false)
 
+    // API Key Management State
+    const [apiKeys, setApiKeys] = useState({ gemini: '', ilmuchat: '' })
+    const [showKeys, setShowKeys] = useState({ gemini: false, ilmuchat: false })
+    const [savingKeys, setSavingKeys] = useState(false)
+
+    // Load user's API keys on mount
+    useEffect(() => {
+        async function loadKeys() {
+            if (user?.id) {
+                const keys = await getUserApiKeys(user.id)
+                setApiKeys({
+                    gemini: keys.gemini || '',
+                    ilmuchat: keys.ilmuchat || ''
+                })
+            }
+        }
+        loadKeys()
+    }, [user?.id])
+
+    const handleSaveApiKeys = async () => {
+        if (!user?.id) {
+            toast.error('You must be logged in to save API keys')
+            return
+        }
+        setSavingKeys(true)
+        try {
+            await saveUserApiKeys(user.id, apiKeys)
+            toast.success('API keys saved successfully')
+        } catch (error) {
+            console.error('Error saving API keys:', error)
+            toast.error('Failed to save API keys')
+        } finally {
+            setSavingKeys(false)
+        }
+    }
+
     return (
-        <div className="space-y-6 w-full">
+        <PageContainer>
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <div>
-                    <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em' }} className="text-foreground">Settings</h1>
-                    <p className="text-muted-foreground mt-1">Manage your account and preferences</p>
+                    <PageHeader
+                        className="mb-0"
+                        description="Manage your account and preferences"
+                    >
+                        Settings
+                    </PageHeader>
                 </div>
             </div>
 
@@ -69,40 +113,129 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* AI Connection Status */}
-            <div className="rounded-2xl bg-card border border-border shadow-sm p-6 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                        <Activity className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+            {/* AI Provider Settings */}
+            <div className="space-y-3">
+                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">AI Provider</h2>
+                <div className="rounded-2xl bg-card border border-border p-6">
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                                <Activity className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-foreground">Translation AI</h3>
+                                <p className="text-sm text-muted-foreground">Select which AI provider to use for translations.</p>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <h3 className="font-semibold text-foreground">AI Connection Status</h3>
-                        <p className="text-sm text-muted-foreground">Check if Gemini API is active and responding.</p>
+
+                    {/* Provider Selector */}
+                    <div className="flex items-center gap-4 mb-4">
+                        <select
+                            className="flex-1 h-10 px-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            defaultValue={(() => {
+                                try {
+                                    const { AIService } = require('@/api/ai');
+                                    return AIService.getCurrentProvider();
+                                } catch { return 'gemini'; }
+                            })()}
+                            onChange={async (e) => {
+                                const { AIService } = await import('@/api/ai');
+                                AIService.setProvider(e.target.value);
+                                toast.success(`Switched to ${e.target.value}`);
+                            }}
+                        >
+                            <option value="gemini">🧠 Google Gemini</option>
+                            <option value="ilmuchat">💬 ILMUchat (YTL)</option>
+                        </select>
+                        <Button
+                            variant="outline"
+                            onClick={async () => {
+                                const toastId = toast.loading("Testing connection...")
+                                try {
+                                    const { getAI } = await import('@/api/ai')
+                                    const ai = getAI()
+                                    const res = await ai.testConnection()
+
+                                    if (res.success) {
+                                        toast.success(`Connected! Response: ${res.message}`, { id: toastId })
+                                    } else {
+                                        throw new Error(res.message || "Connection failed")
+                                    }
+                                } catch (err) {
+                                    console.error(err)
+                                    toast.error("Connection Failed. Check API Key.", { id: toastId })
+                                }
+                            }}
+                        >
+                            Test Connection
+                        </Button>
+                    </div>
+
+                    {/* API Key Inputs */}
+                    <div className="space-y-4 pt-4 border-t border-border">
+                        <h4 className="text-sm font-medium text-foreground">Your API Keys</h4>
+                        <p className="text-xs text-muted-foreground">
+                            Enter your own API keys to use instead of the default. Leave blank to use environment defaults.
+                        </p>
+
+                        {/* Gemini Key */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">Google Gemini API Key</label>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        type={showKeys.gemini ? 'text' : 'password'}
+                                        value={apiKeys.gemini}
+                                        onChange={(e) => setApiKeys(prev => ({ ...prev, gemini: e.target.value }))}
+                                        placeholder="AIzaSy..."
+                                        className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowKeys(prev => ({ ...prev, gemini: !prev.gemini }))}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    >
+                                        {showKeys.gemini ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ILMUchat Key */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">ILMUchat API Key</label>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        type={showKeys.ilmuchat ? 'text' : 'password'}
+                                        value={apiKeys.ilmuchat}
+                                        onChange={(e) => setApiKeys(prev => ({ ...prev, ilmuchat: e.target.value }))}
+                                        placeholder="sk-..."
+                                        className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowKeys(prev => ({ ...prev, ilmuchat: !prev.ilmuchat }))}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    >
+                                        {showKeys.ilmuchat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Save Button */}
+                        <Button
+                            onClick={handleSaveApiKeys}
+                            disabled={savingKeys}
+                            className="w-full"
+                        >
+                            <Save className="w-4 h-4 mr-2" />
+                            {savingKeys ? 'Saving...' : 'Save API Keys'}
+                        </Button>
                     </div>
                 </div>
-                <Button
-                    variant="outline"
-                    onClick={async () => {
-                        const toastId = toast.loading("Testing connection...")
-                        try {
-                            // Test generic AI connection
-                            const { getAI } = await import('@/api/ai')
-                            const ai = getAI()
-                            const res = await ai.testConnection()
-
-                            if (res.success) {
-                                toast.success(`Connected! Response: ${res.message}`, { id: toastId })
-                            } else {
-                                throw new Error(res.message || "Connection failed")
-                            }
-                        } catch (err) {
-                            console.error(err)
-                            toast.error("Connection Failed. Check API Key.", { id: toastId })
-                        }
-                    }}
-                >
-                    Test Connection
-                </Button>
             </div>
 
             {/* Admin/Manager Settings */}
@@ -162,6 +295,6 @@ export default function Settings() {
                 onOpenChange={setIsPasswordOpen}
             />
 
-        </div>
+        </PageContainer>
     )
 }

@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/App"
 import { ROLES, getRoleLabel, getRoleColor } from "@/lib/permissions"
-import { getUsers, updateUserRole } from "@/api/pocketbase"
+import { getUsers, updateUserRole } from "@/api/firebase"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import UserManagementDialog from "@/components/dialogs/UserManagementDialog" // Reuse for 'New User' modal logic if needed? 
@@ -176,7 +176,7 @@ export default function UsersPage() {
                         <Filter className="w-4 h-4" />
                         Filter
                     </Button>
-                    <Button className="gap-2 h-9 rounded-full px-4 bg-card border border-border text-foreground hover:bg-muted shadow-sm">
+                    <Button className="gap-2 h-9 rounded-full px-4 bg-card border border-border text-foreground hover:bg-muted">
                         <Plus className="w-4 h-4" />
                         New user
                     </Button>
@@ -193,7 +193,7 @@ export default function UsersPage() {
             </div>
 
             {/* Table Area */}
-            <div className="flex-1 overflow-hidden rounded-2xl border border-border shadow-sm bg-card flex flex-col">
+            <div className="flex-1 overflow-hidden rounded-2xl border border-border bg-card flex flex-col">
                 <div className="flex-1 overflow-auto">
                     <DataTable
                         columns={columns}

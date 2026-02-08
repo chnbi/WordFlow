@@ -83,8 +83,6 @@ export const LANGUAGES = {
     zh: { id: 'zh', code: 'zh', label: 'Simplified Chinese', nativeLabel: '简体中文', direction: 'ltr' },
     // Future languages can be added here:
     // ja: { id: 'ja', code: 'ja', label: 'Japanese', nativeLabel: '日本語', direction: 'ltr' },
-    // ko: { id: 'ko', code: 'ko', label: 'Korean', nativeLabel: '한국어', direction: 'ltr' },
-    // th: { id: 'th', code: 'th', label: 'Thai', nativeLabel: 'ไทย', direction: 'ltr' },
 }
 
 // Default source language (can be overridden per project)
@@ -134,138 +132,88 @@ export const DESIGN_TOKENS = {
 }
 
 // ============================================
-// COLORS - Single Source of Truth
-// All colors used across the application
+// COLORS - Single Source of Truth (Figma Palette)
 // ============================================
 
 export const COLORS = {
-    // === CORE COLORS ===
-    core: {
-        fuchsia: '#FF0084',       // Primary brand color
-        blue: '#5174FF',          // Blue accent
-        spaceCadet: '#1C2541',    // Dark navy
-        black: '#0D0D0D',
-        white: '#FFFFFF',
-    },
+    // === CORE ===
+    fuchsia: '#FF0084',
+    blue: '#5174FF',
+    spaceCadet: '#1C2541',
+    black: '#0D0D0D',
+    white: '#FFFFFF',
 
-    // === ACCENT COLORS ===
-    accents: {
-        aquamarine: '#76E5E0',
-        jasmine: '#F9E784',
-        salmon: '#FFA69E',
-        yorkieBlue: '#82A3CC',
-    },
+    // === ACCENTS ===
+    aquamarine: '#76E5E0',
+    jasmine: '#F9E784',
+    salmon: '#FFA69E',
+    yorkieBlue: '#82A3CC',
 
-    // === BASE COLORS (Light Mode) ===
+    // === BASE (Light Mode) ===
     light: {
-        paperWhite: '#F9F9F9',    // Main background
-        ghostwater: '#F1F1F3',    // Card backgrounds
-        lightGrey: '#E5E6EB',     // Subtle backgrounds
-        darkGrey: '#B4B6C1',      // Muted elements
+        paperWhite: '#F9F9F9',     // Background
+        ghostwater: '#F1F1F3',     // Card / Secondary BG
+        lightGrey: '#E5E6EB',      // Borders / Muted BG
+        darkGrey: '#B4B6C1',       // Disabled / Placeholder
     },
 
-    // === BASE COLORS (Dark Mode) ===
+    // === BASE (Dark Mode) ===
     dark: {
-        paperWhite: '#1A1A24',    // Main background
-        ghostwater: '#252532',    // Card backgrounds
-        lightGrey: '#32323E',     // Subtle backgrounds
-        darkGrey: '#47475A',      // Muted elements
-        black: '#0A0A0F',         // Deepest black
+        paperWhite: '#1A1A24',     // Background
+        ghostwater: '#252532',     // Card / Secondary BG
+        lightGrey: '#32323E',      // Borders / Muted BG
+        darkGrey: '#47475A',       // Subtle elements
+        black: '#0A0A0F',          // Deepest
     },
 
-    // === STROKE COLORS ===
+    // === STROKE ===
     stroke: {
-        light: {
-            strokeGrey: '#E5E6EB',
-            midGrey: '#D1D2D9',
-        },
-        dark: {
-            strokeGrey: '#32323E',
-            midGrey: '#47475A',
-        },
+        light: '#E5E6EB',
+        dark: '#32323E',
     },
 
-    // === CONTENT/TEXT COLORS ===
+    // === CONTENT / TEXT ===
     content: {
         light: {
-            black: '#0D0D0D',
-            darkGrey: '#52535E',
-            midGrey: '#7E7F8A',
-            lightGrey: '#B4B6C1',
-            white: '#FFFFFF',
+            primary: '#0D0D0D',    // Black
+            secondary: '#52535E',  // Dark Grey
+            muted: '#7E7F8A',      // Mid Grey
+            disabled: '#B4B6C1',   // Light Grey
         },
         dark: {
-            white: '#FFFFFF',
-            lightGrey: '#B4B6C1',
-            midGrey: '#7E7F8A',
-            darkGrey: '#52535E',
-            black: '#0D0D0D',
+            primary: '#FFFFFF',    // White
+            secondary: '#B4B6C1',  // Light Grey
+            muted: '#7E7F8A',      // Mid Grey
+            disabled: '#52535E',   // Dark Grey
         },
     },
 
-    // === STATE COLORS ===
-    states: {
-        positive: {
-            DEFAULT: '#10B981',   // Emerald-500
-            hover: '#059669',     // Darker
-            light: '#D1FAE5',     // Light background
-        },
-        warning: {
-            DEFAULT: '#F59E0B',   // Amber-500
-            hover: '#D97706',     // Darker
-            light: '#FEF3C7',     // Light background
-        },
-        negative: {
-            DEFAULT: '#EF4444',   // Red-500
-            hover: '#DC2626',     // Darker
-            light: '#FEE2E2',     // Light background
-        },
-    },
+    // === STATES ===
+    positive: '#4ADE80',   // Green
+    positiveHover: '#22C55E',
+    warning: '#FACC15',    // Yellow
+    warningHover: '#EAB308',
+    negative: '#EF4444',   // Red
+    negativeHover: '#DC2626',
 
-    // === PINK SYSTEM (Brand Primary) ===
-    pink: {
-        fuchsia: '#FF0084',       // Primary pink (buttons, highlights)
-        fuchsiaHover: '#E60077',  // Hover state
-        secondary: '#FF4AA7',     // Secondary pink
-        medium: '#FF85C0',        // Medium pink (icons, accents)
-        light: '#FFB9DD',         // Light pink (backgrounds, tags)
-        lightest: '#FFE5EC',      // Lightest pink (subtle backgrounds)
-        pressed: '#CC006A',       // Pressed/active state
-    },
-
-    // === BUTTON COLORS ===
+    // === BUTTONS ===
     buttons: {
-        primary: {
-            DEFAULT: '#FF0084',
-            hover: '#E60077',
-            pressed: '#CC006A',
-        },
-        secondary: {
-            DEFAULT: '#F9F9F9',
-            hover: '#E5E6EB',
-            pressed: '#D1D2D9',
-        },
-        tertiary: {
-            DEFAULT: 'transparent',
-            hover: '#FFE5EC',
-            pressed: '#FFB9DD',
-        },
+        primary: '#FF0084',
+        primaryHover: '#E60077',
+        primaryPressed: '#CC006A',
+        secondary: '#F9F9F9',
+        secondaryHover: '#E5E6EB',
+        secondaryPressed: '#D1D2D9',
+        tertiary: 'transparent',
+        tertiaryHover: '#FFE5EC',
+        tertiaryPressed: '#FFB9DD',
     },
 
-    // === SEMANTIC ALIASES ===
-    // Use these in components for consistent theming
+    // === SEMANTIC ALIASES (for quick access) ===
     primary: '#FF0084',
     primaryHover: '#E60077',
     primaryLight: '#FFB9DD',
     primaryLightest: '#FFE5EC',
-
-    textPrimary: '#0D0D0D',
-    textSecondary: '#52535E',
-    textMuted: '#7E7F8A',
-
-    border: '#E5E6EB',
-    background: '#F9F9F9',
-    surface: '#FFFFFF',
 }
 
 // Helper to get color with optional opacity

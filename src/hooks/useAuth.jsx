@@ -1,124 +1,97 @@
-// Authentication Hook - PocketBase Integration
-import { useState, useEffect, useContext, createContext, useCallback } from 'react'
-import pb from '../api/pocketbase/client'
-import { getUserByEmail, upsertUser } from '../api/pocketbase'
-import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor } from '../lib/permissions'
+// Authentication Hook - Firebase Integration
+import { useState, useEffect, useContext, createContext, useCallback } from 'react';
+import {
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut as firebaseSignOut
+} from 'firebase/auth';
+import { auth } from '../lib/firebase';
+import { getUser } from '../api/firebase/roles'; // For fetching user role from Firestore
+import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor } from '../lib/permissions';
 
-const AuthContext = createContext(null)
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null)
-    const [userRole, setUserRole] = useState(ROLES.EDITOR)
-    const [loading, setLoading] = useState(true)
+    const [user, setUser] = useState(null);
+    const [userRole, setUserRole] = useState(ROLES.EDITOR);
+    const [loading, setLoading] = useState(true);
 
-    // Load user data and role from PocketBase
-    const loadUserRole = useCallback(async (authUser) => {
-        if (!authUser?.email) {
-            setUserRole(ROLES.EDITOR)
-            return
+    // Load user role from Firestore
+    const loadUserRole = useCallback(async (uid) => {
+        if (!uid) {
+            setUserRole(ROLES.EDITOR);
+            return;
         }
 
         try {
-            // Get role directly from auth user model
-            const role = authUser.role || ROLES.EDITOR
-            setUserRole(role)
-            console.log('✅ [PocketBase] User role loaded:', role)
+            const userDoc = await getUser(uid);
+            const role = userDoc?.role || ROLES.EDITOR;
+            setUserRole(role);
+            console.log('[Firebase] User role loaded:', role);
         } catch (error) {
-            console.error('Error loading user role:', error)
-            setUserRole(ROLES.EDITOR)
+            console.error('[Firebase] Error loading user role:', error);
+            setUserRole(ROLES.EDITOR);
         }
-    }, [])
+    }, []);
 
     useEffect(() => {
-        // Check if there's already an authenticated user
-        const checkAuth = async () => {
-            try {
-                if (pb.authStore.isValid && pb.authStore.model) {
-                    const authUser = pb.authStore.model
-                    setUser({
-                        id: authUser.id,
-                        email: authUser.email,
-                        name: authUser.name || authUser.username,
-                        avatar: authUser.avatar
-                    })
-                    await loadUserRole(authUser)
-                } else {
-                    setUser(null)
-                    setUserRole(ROLES.EDITOR)
-                }
-            } catch (error) {
-                console.error('Auth check error:', error)
-                setUser(null)
-            } finally {
-                setLoading(false)
-            }
-        }
-
-        checkAuth()
-
         // Listen for auth changes
-        const unsubscribe = pb.authStore.onChange((token, model) => {
-            if (model) {
+        const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+            if (authUser) {
                 setUser({
-                    id: model.id,
-                    email: model.email,
-                    name: model.name || model.username,
-                    avatar: model.avatar
-                })
-                loadUserRole(model)
+                    id: authUser.uid,
+                    email: authUser.email,
+                    name: authUser.displayName || authUser.email.split('@')[0],
+                    avatar: authUser.photoURL
+                });
+                await loadUserRole(authUser.uid);
             } else {
-                setUser(null)
-                setUserRole(ROLES.EDITOR)
+                setUser(null);
+                setUserRole(ROLES.EDITOR);
             }
-        })
+            setLoading(false);
+        });
 
-        return () => {
-            if (typeof unsubscribe === 'function') {
-                unsubscribe()
-            }
-        }
-    }, [loadUserRole])
+        return () => unsubscribe();
+    }, [loadUserRole]);
 
     const signIn = async (email, password) => {
         try {
-            const authData = await pb.collection('users').authWithPassword(email, password)
-            console.log('✅ [PocketBase] User signed in:', authData.record.email)
-            return authData
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log('[Firebase] User signed in:', userCredential.user.email);
+            return userCredential.user;
         } catch (error) {
-            console.error('Sign in error:', error)
-            throw error
+            console.error('Sign in error:', error);
+            // Throw existing error for UI handling
+            throw error;
         }
-    }
+    };
 
+    // OAuth not yet configured in Firebase console, but placeholder:
     const signInWithOAuth = async (provider = 'google') => {
-        try {
-            const authData = await pb.collection('users').authWithOAuth2({ provider })
-            console.log('✅ [PocketBase] OAuth sign in:', authData.record.email)
-            return authData
-        } catch (error) {
-            console.error('OAuth sign in error:', error)
-            throw error
-        }
-    }
+        console.warn('OAuth not yet implemented in Firebase adapter');
+        // Implementation would use signInWithPopup(auth, new GoogleAuthProvider())
+        throw new Error('OAuth not supported yet');
+    };
 
     const signOut = async () => {
         try {
-            pb.authStore.clear()
-            setUser(null)
-            setUserRole(ROLES.EDITOR)
-            console.log('✅ [PocketBase] User signed out')
-            // Reload to show login page
-            window.location.reload()
+            await firebaseSignOut(auth);
+            setUser(null);
+            setUserRole(ROLES.EDITOR);
+            console.log('[Firebase] User signed out');
+            // Reload not strictly necessary with Firebase listener, but good for clearing state
+            window.location.reload();
         } catch (error) {
-            console.error('Sign out error:', error)
-            throw error
+            console.error('Sign out error:', error);
+            throw error;
         }
-    }
+    };
 
     // Helper to check if user can perform an action
     const canDo = useCallback((action) => {
-        return checkPermission(userRole, action)
-    }, [userRole])
+        return checkPermission(userRole, action);
+    }, [userRole]);
 
     const value = {
         user,
@@ -134,21 +107,21 @@ export function AuthProvider({ children }) {
         getRoleLabel,
         getRoleColor,
         ROLES,
-    }
+    };
 
     return (
         <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
-    )
+    );
 }
 
 export function useAuth() {
-    const context = useContext(AuthContext)
+    const context = useContext(AuthContext);
     if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider')
+        throw new Error('useAuth must be used within an AuthProvider');
     }
-    return context
+    return context;
 }
 
-export { ROLES }
+export { ROLES };

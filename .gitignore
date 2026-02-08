@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 build/
+.firebase/
 
 # Environment variables (IMPORTANT - never commit API keys!)
 .env
@@ -27,4 +28,5 @@ src/archive/
 # Documentation and text files (not needed in git)
 *.md
 *.txt
-documentation/
+documentation/wordflow-a66bb-firebase-adminsdk-fbsvc-c5d853574a.json
+wordflow-a66bb-firebase-adminsdk-fbsvc-d7f1f72126.json

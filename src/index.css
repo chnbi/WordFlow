@@ -6,27 +6,26 @@
 
 @layer base {
     :root {
-        /* ===== UNIFIED THEME - Light Mode ===== */
-        /* Based on Design System Color Grid */
+        /* ===== UNIFIED THEME - Light Mode (Figma Palette) ===== */
 
         /* Base - Paper White #F9F9F9 */
         --background: 0 0% 98%;
-        --foreground: 222 47% 11%;
+        --foreground: 0 0% 5%;
         --app-background: 0 0% 98%;
 
-        /* Card - White */
+        /* Card - White #FFFFFF */
         --card: 0 0% 100%;
-        --card-foreground: 222 47% 11%;
+        --card-foreground: 0 0% 5%;
 
         /* Popover */
         --popover: 0 0% 100%;
-        --popover-foreground: 222 47% 11%;
+        --popover-foreground: 0 0% 5%;
 
         /* Primary: Fuchsia #FF0084 */
         --primary: 329 100% 50%;
         --primary-foreground: 0 0% 100%;
 
-        /* Secondary Pink: #FF4AA7 */
+        /* Secondary Pink: #FF4AA7 (not in new palette, removed) */
         --secondary-pink: 329 100% 65%;
         --secondary-pink-foreground: 0 0% 100%;
 
@@ -38,7 +37,7 @@
 
         /* Secondary - Ghostwater #F1F1F3 */
         --secondary: 240 6% 95%;
-        --secondary-foreground: 222 47% 11%;
+        --secondary-foreground: 0 0% 5%;
 
         /* Muted - Light Grey #E5E6EB */
         --muted: 233 10% 91%;
@@ -57,14 +56,14 @@
         --input: 233 10% 91%;
         --ring: 329 100% 50%;
 
-        /* Softer, larger radius for "cute" feel */
+        /* Radius */
         --radius: 1rem;
         --radius-card: 1.25rem;
         --radius-button: 0.75rem;
 
         /* Sidebar: Light mode */
-        --sidebar-background: 240 20% 98%;
-        --sidebar-foreground: 222 47% 20%;
+        --sidebar-background: 0 0% 98%;
+        --sidebar-foreground: 0 0% 20%;
         --sidebar-primary: 329 100% 86%;
         --sidebar-primary-foreground: 329 100% 50%;
         --sidebar-accent: 329 100% 98%;
@@ -74,50 +73,59 @@
     }
 
     .dark {
-        /* ===== UNIFIED THEME - Dark Mode (Zinc/Premium) ===== */
-        --background: 240 10% 3.9%;
-        --foreground: 0 0% 98%;
-        --app-background: 240 10% 3.9%;
+        /* ===== UNIFIED THEME - Dark Mode (Figma Palette) ===== */
 
-        --card: 240 10% 3.9%;
-        --card-foreground: 0 0% 98%;
+        /* Base - Paper White (Dark) #1A1A24 */
+        --background: 240 16% 12%;
+        --foreground: 0 0% 100%;
+        --app-background: 240 16% 12%;
 
-        --popover: 240 10% 3.9%;
-        --popover-foreground: 0 0% 98%;
+        /* Card - Ghostwater (Dark) #252532 */
+        --card: 240 14% 17%;
+        --card-foreground: 0 0% 100%;
 
-        /* Primary: Pink (Preserved) */
+        /* Popover */
+        --popover: 240 14% 17%;
+        --popover-foreground: 0 0% 100%;
+
+        /* Primary: Fuchsia (Preserved) */
         --primary: 329 100% 50%;
         --primary-foreground: 0 0% 100%;
 
-        /* Secondary Pink: #FF4AA7 */
+        /* Secondary Pink */
         --secondary-pink: 329 100% 65%;
         --secondary-pink-foreground: 0 0% 100%;
 
-        --secondary: 240 3.7% 15.9%;
-        --secondary-foreground: 0 0% 98%;
+        /* Secondary - Light Grey (Dark) #32323E */
+        --secondary: 240 11% 22%;
+        --secondary-foreground: 0 0% 100%;
 
-        --muted: 240 3.7% 15.9%;
-        --muted-foreground: 240 5% 64.9%;
+        /* Muted - Dark Grey #47475A */
+        --muted: 240 11% 31%;
+        --muted-foreground: 230 6% 64%;
 
-        --accent: 240 3.7% 15.9%;
-        --accent-foreground: 0 0% 98%;
+        /* Accent */
+        --accent: 240 11% 22%;
+        --accent-foreground: 0 0% 100%;
 
+        /* Destructive */
         --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
+        --destructive-foreground: 0 0% 100%;
 
-        --border: 240 3.7% 15.9%;
-        --input: 240 3.7% 15.9%;
-        --ring: 340 82% 59%;
+        /* Borders: Stroke (Dark) #32323E */
+        --border: 240 11% 22%;
+        --input: 240 11% 22%;
+        --ring: 329 100% 50%;
 
-        /* Sidebar: Dark mode (Deep Zinc) */
-        --sidebar-background: 240 5.9% 10%;
-        --sidebar-foreground: 240 4.8% 95.9%;
+        /* Sidebar: Dark mode */
+        --sidebar-background: 240 33% 3%;
+        --sidebar-foreground: 0 0% 95%;
         --sidebar-primary: 329 100% 50%;
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 240 3.7% 15.9%;
-        --sidebar-accent-foreground: 240 4.8% 95.9%;
-        --sidebar-border: 240 3.7% 15.9%;
-        --sidebar-ring: 340 82% 59%;
+        --sidebar-accent: 240 11% 22%;
+        --sidebar-accent-foreground: 0 0% 95%;
+        --sidebar-border: 240 11% 22%;
+        --sidebar-ring: 329 100% 50%;
     }
 }
 

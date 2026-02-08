@@ -5,6 +5,7 @@ import { useProjects } from "@/context/ProjectContext"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
 import { parseExcelFile } from "@/lib/excel"
+import { parseFile, detectFileType } from "@/lib/document"
 import { PageHeader, SearchInput } from "@/components/ui/common"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -30,58 +31,15 @@ export default function Dashboard() {
     const { projects, deleteProject, addProject } = useProjects()
     const [isNewProjectOpen, setIsNewProjectOpen] = useState(false)
     const [deleteConfirm, setDeleteConfirm] = useState(null)
-    const [importData, setImportData] = useState(null) // For import mode
-    const fileInputRef = useRef(null)
-
-    // Pagination state
     const [currentPage, setCurrentPage] = useState(1)
-    const [itemsPerPage, setItemsPerPage] = useState(12)
-
+    const itemsPerPage = 10
     const handleCreateProject = async (projectData) => {
         const result = await addProject(projectData)
         setIsNewProjectOpen(false)
-        setImportData(null) // Clear import data
         if (result?.id) {
             toast.success(projectData.sheets ? "Project imported successfully!" : "New project created!")
             window.location.hash = `#project/${result.id}${result.firstPageId ? `?page=${result.firstPageId}` : ''}`
         }
-    }
-
-    const handleImportProject = async (e) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
-        try {
-            const data = await parseExcelFile(file)
-            // Data is { Sheet1: { entries: [...] }, Sheet2: { entries: [...] } }
-            // We need to map this to { Sheet1: [...rows], Sheet2: [...rows] }
-
-            const sheets = {}
-            Object.values(data).forEach(sheet => {
-                // Entries are already normalized by parseExcelFile with language code keys
-                sheets[sheet.name] = sheet.entries
-            })
-
-            const projectName = file.name.replace(/\.[^/.]+$/, "")
-
-            // Open dialog with import data for user to select languages
-            setImportData({
-                fileName: projectName,
-                sheets: sheets
-            })
-            setIsNewProjectOpen(true)
-
-        } catch (error) {
-            console.error("Import failed:", error)
-            toast.error("Failed to parse file: " + error.message)
-        } finally {
-            if (fileInputRef.current) fileInputRef.current.value = ''
-        }
-    }
-
-    const handleCloseDialog = () => {
-        setIsNewProjectOpen(false)
-        setImportData(null)
     }
 
     // Compute Stats
@@ -169,27 +127,13 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-foreground">Recent projects</h2>
                     <div className="flex items-center gap-2">
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleImportProject}
-                            accept=".xlsx,.xls,.csv"
-                            className="hidden"
-                        />
-                        <Button
-                            onClick={() => fileInputRef.current?.click()}
-                            variant="outline"
-                            className="rounded-full px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-sm font-medium border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all"
-                        >
-                            <Upload className="w-4 h-4 mr-2" /> Import file
-                        </Button>
-                        <Button onClick={() => setIsNewProjectOpen(true)} className="bg-[#FF0084] hover:bg-[#E60077] text-white rounded-full px-4 h-9">
+                        <Button onClick={() => setIsNewProjectOpen(true)} className="bg-primary hover:bg-primary/90 text-white rounded-full px-4 h-9">
                             <Plus className="w-4 h-4 mr-2" /> New Project
                         </Button>
                     </div>
                 </div>
 
-                <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
                     <Table>
                         <TableHeader>
                             <TableRow className="hover:bg-transparent border-b border-border">
@@ -221,7 +165,7 @@ export default function Dashboard() {
                                     <TableCell>
                                         <div className="flex items-center gap-3">
                                             {/* Progress Bar styled to match image (Teal/Blue) */}
-                                            <Progress value={project.progress || 0} className="h-1.5 bg-muted w-24 [&>div]:bg-[#5174FF]" />
+                                            <Progress value={project.progress || 0} className="h-1.5 bg-muted w-24 [&>div]:bg-blue-500" />
                                             <span className="text-xs text-muted-foreground w-8">{project.progress || 0}%</span>
                                         </div>
                                     </TableCell>
@@ -269,16 +213,14 @@ export default function Dashboard() {
                             totalItems={totalItems}
                             itemsPerPage={itemsPerPage}
                             onPageChange={setCurrentPage}
-                            onItemsPerPageChange={setItemsPerPage}
                         />
                     )}
                 </div>
             </div>
             <NewProjectForm
                 isOpen={isNewProjectOpen}
-                onClose={handleCloseDialog}
+                onClose={() => setIsNewProjectOpen(false)}
                 onSubmit={handleCreateProject}
-                importData={importData}
             />
 
             <ConfirmDialog

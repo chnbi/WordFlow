@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Agentation } from 'agentation';
 import { Toaster } from "sonner";
-import { getUserByEmail } from './api/pocketbase';
+import { getUserByEmail } from './api/firebase';
 
 // Contexts & Providers
 import { ProjectProvider } from './context/ProjectContext';
@@ -34,7 +34,7 @@ function App() {
     const [currentRole, setCurrentRole] = useState(ROLES.MANAGER);
     const [loading, setLoading] = useState(true);
 
-    // Load user role from PocketBase on mount (dev mode)
+    // Load user role from Firebase on mount (dev mode)
     const loadDevUserRole = useCallback(async () => {
         if (!DEV_BYPASS_AUTH) return;
 
@@ -48,12 +48,12 @@ function App() {
                     avatar: userData.avatar
                 });
                 setCurrentRole(userData.role || ROLES.MANAGER);
-                console.log('✅ [PocketBase] Dev user role loaded:', userData.role);
+                console.log('[Firebase] Dev user role loaded:', userData.role);
             } else {
-                console.log('📝 [PocketBase] No user found, using default dev role');
+                console.log('[Firebase] No user found, using default dev role');
             }
         } catch (error) {
-            console.log('📝 [PocketBase] Could not load dev user, using defaults:', error.message);
+            console.log('[Firebase] Could not load dev user, using defaults:', error.message);
         } finally {
             setLoading(false);
         }
@@ -97,7 +97,7 @@ function App() {
         );
     }
 
-    // Production mode - use real PocketBase auth
+    // Production mode - use real Firebase auth
     function AppContent() {
         const { user, loading } = useAuth();
 

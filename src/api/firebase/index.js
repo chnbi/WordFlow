@@ -1,4 +1,4 @@
-// services/pocketbase/index.js - Barrel export for all PocketBase services
+// services/firebase/index.js - Barrel export for all Firebase services
 // This provides a single import point with full backward compatibility
 
 // Project operations
@@ -15,13 +15,14 @@ export {
     getPageRows,
     addPageRows,
     updatePageRow,
-    getProjectRows,
-    addProjectRows,
-    updateProjectRow,
+    getProjectRows, // Legacy
+    addProjectRows, // Legacy
+    updateProjectRow, // Legacy
     updateProjectRows,
     deletePageRows,
-    deleteProjectRows
-} from './projects'
+    deleteProjectRows,
+    getUserSubmissions
+} from './projects';
 
 // Template operations
 export {
@@ -31,7 +32,7 @@ export {
     deleteTemplate,
     getOrCreateDefaultTemplate,
     DEFAULT_TEMPLATE
-} from './templates'
+} from './templates';
 
 // Glossary operations
 export {
@@ -46,7 +47,7 @@ export {
     getGlossaryCategories,
     createGlossaryCategory,
     deleteGlossaryCategory
-} from './glossary'
+} from './glossary';
 
 // Audit Trail operations
 export {
@@ -57,7 +58,7 @@ export {
     formatAction,
     formatRelativeTime,
     AUDIT_ACTIONS
-} from './audit'
+} from './audit';
 
 // Role & User Management
 export {
@@ -68,7 +69,17 @@ export {
     updateUserRole,
     deleteUser,
     getRoles
-} from './roles'
+} from './roles';
 
-// Export PocketBase client for direct access if needed
-export { default as pb } from './client'
+// API Key Management
+export {
+    getUserApiKeys,
+    saveUserApiKeys,
+    clearApiKeyCache,
+    getEffectiveApiKey
+} from './apiKeys';
+
+// Export Firebase instances for direct access if needed
+// Replacing 'pb' with 'db' and 'auth'
+import { db, auth } from '../../lib/firebase';
+export { db, auth };

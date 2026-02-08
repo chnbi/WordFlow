@@ -61,7 +61,7 @@ export default function Pagination({
                     size="sm"
                     onClick={() => onPageChange?.(1)}
                     disabled={!canGoPrevious}
-                    className="h-8 w-8 p-0"
+                    className="h-8 w-8 p-0 rounded-lg"
                 >
                     <ChevronsLeft className="h-4 w-4" />
                     <span className="sr-only">First page</span>
@@ -71,13 +71,13 @@ export default function Pagination({
                     size="sm"
                     onClick={() => onPageChange?.(currentPage - 1)}
                     disabled={!canGoPrevious}
-                    className="h-8 w-8 p-0"
+                    className="h-8 w-8 p-0 rounded-lg"
                 >
                     <ChevronLeft className="h-4 w-4" />
                     <span className="sr-only">Previous page</span>
                 </Button>
 
-                <div className="text-sm font-medium mx-4">
+                <div className="text-sm font-medium mx-4 min-w-[3rem] text-center">
                     Page {currentPage} of {totalPages || 1}
                 </div>
 
@@ -86,7 +86,7 @@ export default function Pagination({
                     size="sm"
                     onClick={() => onPageChange?.(currentPage + 1)}
                     disabled={!canGoNext}
-                    className="h-8 w-8 p-0"
+                    className="h-8 w-8 p-0 rounded-lg"
                 >
                     <ChevronRight className="h-4 w-4" />
                     <span className="sr-only">Next page</span>
@@ -96,7 +96,7 @@ export default function Pagination({
                     size="sm"
                     onClick={() => onPageChange?.(totalPages)}
                     disabled={!canGoNext}
-                    className="h-8 w-8 p-0"
+                    className="h-8 w-8 p-0 rounded-lg"
                 >
                     <ChevronsRight className="h-4 w-4" />
                     <span className="sr-only">Last page</span>

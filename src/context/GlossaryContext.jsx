@@ -1,8 +1,8 @@
 // GlossaryContext - Centralized state management for glossary terms
-// Now with PocketBase persistence and Audit Trail
+// Now with Firebase persistence and Audit Trail
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import * as dbService from '@/api/pocketbase'
-import { logAction, AUDIT_ACTIONS } from '@/api/pocketbase'
+import * as dbService from '@/api/firebase'
+import { logAction, AUDIT_ACTIONS } from '@/api/firebase'
 import { toast } from "sonner"
 
 // Safe auth hook - returns null user if auth context not ready
@@ -29,38 +29,74 @@ export function GlossaryProvider({ children }) {
     const [isLoading, setIsLoading] = useState(true)
     const [dataSource, setDataSource] = useState('loading')
 
-    // Load glossary terms from Firestore on mount
-    useEffect(() => {
-        async function loadData() {
-            try {
-                console.log('🔄 [PocketBase] Loading glossary terms...')
-                const firestoreTerms = await dbService.getGlossaryTerms()
+    // Load glossary terms from Firestore
+    const refreshGlossary = useCallback(async () => {
+        setIsLoading(true)
+        try {
+            console.log('[Firebase] Loading glossary terms...')
+            const firestoreTerms = await dbService.getGlossaryTerms()
 
-                // Load categories
-                const firestoreCategories = await dbService.getGlossaryCategories()
-                const finalCategories = firestoreCategories.length > 0
-                    ? firestoreCategories
-                    : [] // No fallback categories
+            // Load categories
+            const firestoreCategories = await dbService.getGlossaryCategories()
+            const finalCategories = firestoreCategories.length > 0
+                ? firestoreCategories
+                : [] // No fallback categories
 
-                setTerms(firestoreTerms)
-                setCategories(finalCategories)
-                setDataSource('firestore')
-                console.log('✅ [PocketBase] Loaded', firestoreTerms.length, 'glossary terms')
-            } catch (error) {
-                console.error('❌ [PocketBase] Error loading glossary:', error)
-                toast.error("Failed to load glossary")
-                setDataSource('error')
-            } finally {
-                setIsLoading(false)
+            // Normalize terms to ensure consistent field names (handle legacy data)
+            const normalizedTerms = firestoreTerms.map(t => {
+                const tx = t.translations || {}
+
+                // Helper to extract text from translation value (string or object with .text)
+                const getText = (val) => {
+                    if (!val) return ''
+                    // Handle Firestore Timestamp or unexpected objects? No, just check .text
+                    if (typeof val === 'object' && val.text) return val.text
+                    if (typeof val === 'string') return val
+                    return ''
+                }
+
+                return {
+                    ...t,
+                    // Check top-level first, then translations object (handling both string and object formats)
+                    en: t.en || t.english || t.term || getText(tx.en) || getText(tx.english) || '',
+                    my: t.my || t.malay || getText(tx.my) || getText(tx.malay) || '',
+                    // Added 'zh' (from constants)
+                    cn: t.cn || t.chinese || getText(tx.cn) || getText(tx.chinese) || getText(tx.zh) || '',
+                    // Check category and categoryId
+                    category: t.category || t.categoryId || 'General',
+                    remark: t.remark || t.remarks || '',
+                    status: t.status || 'draft'
+                }
+            })
+
+            setTerms(normalizedTerms)
+            setCategories(finalCategories)
+            setDataSource('firestore')
+            console.log('[Firebase] Loaded', firestoreTerms.length, 'glossary terms')
+
+            // DEBUG: Check translations keys if still empty
+            if (firestoreTerms.length > 0) {
+                // const tx = firestoreTerms[0].translations || {}
+                // console.log('DEBUG: Translations Keys:', Object.keys(tx).join(", "))
             }
+
+        } catch (error) {
+            console.error('[Firebase] Error loading glossary:', error)
+            toast.error("Failed to load glossary")
+            setDataSource('error')
+        } finally {
+            setIsLoading(false)
         }
+    }, [setTerms, setCategories, setDataSource, setIsLoading])
 
-        loadData()
-    }, [])
+    // Initial load
+    useEffect(() => {
+        refreshGlossary()
+    }, [refreshGlossary])
 
-    // Add a new term (with PocketBase sync)
+    // Add a new term (with Firebase sync)
     const addTerm = useCallback(async (term) => {
-        // Only pass valid PocketBase fields
+        // Only pass valid Firebase fields
         const termData = {
             en: term.en || term.english || '',
             my: term.my || term.malay || '',
@@ -89,7 +125,7 @@ export function GlossaryProvider({ children }) {
 
     // Batch add terms
     const addTerms = useCallback(async (newTerms) => {
-        // PocketBase auto-generates created/updated timestamps
+        // Firebase auto-generates created/updated timestamps
         // Only pass valid fields: en, my, cn, category, remark, status
         const termDataArray = newTerms.map(term => ({
             en: term.en || '',
@@ -209,6 +245,7 @@ export function GlossaryProvider({ children }) {
         dataSource,
         addTerm,
         addTerms,
+        refreshGlossary,
         updateTerm,
         deleteTerm,
         deleteTerms,

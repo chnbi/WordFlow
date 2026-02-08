@@ -6,25 +6,28 @@ import { Check, CheckSquare, Square, ArrowUpDown } from 'lucide-react'
 // STANDARDIZED TABLE STYLES (Figma-based)
 // Export for use in other components like Quick Check
 // ==========================================
+// ==========================================
+// STANDARDIZED TABLE STYLES (Figma-based)
+// ==========================================
 export const TABLE_STYLES = {
     // Container
-    container: 'rounded-2xl bg-card shadow-sm overflow-hidden border border-border',
+    container: 'rounded-2xl bg-white dark:bg-slate-900 overflow-hidden border border-gray-100 dark:border-slate-800',
 
-    // Padding values
+    // Padding values (kept for style props that need strict values)
     cellPaddingX: '16px',
     cellPaddingY: '12px',
     headerPaddingY: '14px',
     checkboxColumnWidth: '52px',
 
+    // Tailwind Classes equivalents for direct use
+    headerClass: 'px-4 py-3.5 text-left text-sm font-medium text-muted-foreground select-none',
+    cellClass: 'px-4 py-3 text-sm text-foreground',
+
     // Colors (CSS Variables preferred for proper theme support)
-    borderColor: 'var(--border)', // Use fallback if variable not set? 'hsl(var(--border))' usually
-    headerBg: 'hsl(var(--muted) / 0.5)',
-    headerText: 'hsl(var(--muted-foreground))',
-    cellText: 'hsl(var(--foreground))',
+    borderColor: 'var(--border)',
     primaryColor: 'hsl(var(--primary))',
     mutedColor: 'hsl(var(--muted-foreground))',
 
-    // Computed padding strings
     get headerPadding() { return `${this.headerPaddingY} ${this.cellPaddingX}` },
     get cellPadding() { return `${this.cellPaddingY} ${this.cellPaddingX}` },
 }
@@ -69,7 +72,7 @@ export function DataTable({
     return (
         <div className={TABLE_STYLES.container}>
             <div style={{ overflowX: scrollable ? 'auto' : 'visible' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: scrollable ? 'auto' : 'fixed', minWidth: scrollable ? 'max-content' : undefined }}>
+                <table className="w-full border-collapse" style={{ tableLayout: scrollable ? 'auto' : 'fixed', minWidth: scrollable ? 'max-content' : undefined }}>
                     {/* Colgroup defines fixed column widths */}
                     <colgroup>
                         {onToggleSelect && <col style={{ width: TABLE_STYLES.checkboxColumnWidth }} />}
@@ -77,19 +80,19 @@ export function DataTable({
                             <col key={idx} style={{ width: col.width || 'auto' }} />
                         ))}
                     </colgroup>
-                    <thead className="bg-muted/30">
-                        <tr style={{ borderBottom: '1px solid hsl(var(--border))' }}>
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-gray-100 dark:border-slate-800">
+                        <tr>
                             {/* Checkbox Column */}
                             {onToggleSelect && (
                                 <th style={{ padding: TABLE_STYLES.headerPadding, textAlign: 'center' }} className="first:rounded-tl-xl last:rounded-tr-xl">
                                     <button
                                         onClick={onToggleSelectAll}
-                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', cursor: 'pointer', border: 'none', background: 'none' }}
+                                        className="flex items-center justify-center w-full cursor-pointer border-none bg-transparent"
                                     >
                                         {isAllSelected ? (
-                                            <CheckSquare style={{ width: '16px', height: '16px', color: TABLE_STYLES.primaryColor }} />
+                                            <CheckSquare className="w-4 h-4 text-primary" />
                                         ) : (
-                                            <Square style={{ width: '16px', height: '16px', color: TABLE_STYLES.mutedColor }} />
+                                            <Square className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                                         )}
                                     </button>
                                 </th>
@@ -99,37 +102,30 @@ export function DataTable({
                             {columns.map((col, idx) => (
                                 <th
                                     key={idx}
-                                    className="first:rounded-tl-xl last:rounded-tr-xl"
+                                    className="first:rounded-tl-xl last:rounded-tr-xl text-sm font-medium text-slate-500 dark:text-slate-400 select-none"
                                     style={{
                                         padding: TABLE_STYLES.headerPadding,
                                         textAlign: col.align || 'left',
-                                        fontSize: '14px',
-                                        fontWeight: 500,
-                                        color: TABLE_STYLES.headerText,
                                         cursor: col.sortable ? 'pointer' : 'default',
-                                        userSelect: 'none'
                                     }}
                                     onClick={() => col.sortable && onSort && onSort(col.accessor)}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: col.align === 'center' ? 'center' : 'flex-start' }}>
                                         {col.header}
                                         {col.sortable && (
-                                            <ArrowUpDown style={{
-                                                width: '12px',
-                                                height: '12px',
-                                                opacity: sortConfig?.key === col.accessor ? 1 : 0.4,
-                                                color: sortConfig?.key === col.accessor ? TABLE_STYLES.primaryColor : 'inherit'
-                                            }} />
+                                            <ArrowUpDown
+                                                className={`w-3 h-3 ${sortConfig?.key === col.accessor ? 'text-primary opacity-100' : 'text-slate-400 opacity-40'}`}
+                                            />
                                         )}
                                     </div>
                                 </th>
                             ))}
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                         {data.length === 0 ? (
                             <tr>
-                                <td colSpan={columns.length + (onToggleSelect ? 1 : 0)} style={{ padding: '32px', textAlign: 'center', color: TABLE_STYLES.mutedColor }}>
+                                <td colSpan={columns.length + (onToggleSelect ? 1 : 0)} className="p-8 text-center text-slate-500 dark:text-slate-400">
                                     No data found
                                 </td>
                             </tr>
@@ -137,20 +133,14 @@ export function DataTable({
                             data.map((row, rowIndex) => {
                                 const selected = onToggleSelect ? isSelected(row.id) : false
                                 const customStyle = getRowStyle ? getRowStyle(row) : {}
-                                const bgColor = selected ? 'hsl(var(--primary) / 0.05)' : (customStyle.backgroundColor || 'transparent')
 
                                 return (
                                     <tr
                                         key={row.id || rowIndex}
                                         onClick={() => onRowClick && onRowClick(row)}
-                                        className={`transition-colors ${onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}`}
-                                        style={{
-                                            borderBottom: '1px solid hsl(var(--border))',
-                                            backgroundColor: bgColor,
-                                            ...customStyle,
-                                            // Ensure backgroundColor is handled above to avoid conflict
-                                            backgroundColor: bgColor
-                                        }}
+                                        className={`transition-colors text-slate-900 dark:text-slate-100 ${selected ? 'bg-primary/5 dark:bg-primary/10' : 'bg-transparent'
+                                            } ${onRowClick ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
+                                        style={customStyle}
                                     >
                                         {/* Checkbox Cell */}
                                         {onToggleSelect && (
@@ -160,12 +150,12 @@ export function DataTable({
                                                         e.stopPropagation()
                                                         onToggleSelect(row.id)
                                                     }}
-                                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', cursor: 'pointer', border: 'none', background: 'none' }}
+                                                    className="flex items-center justify-center w-full cursor-pointer border-none bg-transparent"
                                                 >
                                                     {selected ? (
-                                                        <CheckSquare style={{ width: '16px', height: '16px', color: TABLE_STYLES.primaryColor }} />
+                                                        <CheckSquare className="w-4 h-4 text-primary" />
                                                     ) : (
-                                                        <Square style={{ width: '16px', height: '16px', color: TABLE_STYLES.mutedColor }} />
+                                                        <Square className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                                                     )}
                                                 </button>
                                             </td>
@@ -185,8 +175,9 @@ export function DataTable({
                                                         padding: TABLE_STYLES.cellPadding,
                                                         fontSize: '14px',
                                                         textAlign: col.align || 'left',
-                                                        color: col.color || TABLE_STYLES.cellText
+                                                        color: col.color
                                                     }}
+                                                    className={!col.color ? 'text-slate-700 dark:text-slate-200' : ''}
                                                 >
                                                     {cellContent}
                                                 </td>

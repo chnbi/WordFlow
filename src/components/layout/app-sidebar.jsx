@@ -48,6 +48,7 @@ import {
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog"
 import { useAuth } from "@/App"
 import { WordFlowLogo } from "@/components/ui/WordFlowLogo"
+import { COLORS } from "@/lib/constants"
 
 // WordFlow Logo Component - ChatGPT-style behavior
 // Logo navigates home, shows sidebar icon + "Open sidebar" tooltip when collapsed and hovered
@@ -330,7 +331,7 @@ function ProjectWithPages({
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             maxWidth: isHovered ? '90px' : '130px',
-                            color: isActivePage ? '#FF0084' : undefined,
+                            color: isActivePage ? COLORS.primary : undefined,
                             fontWeight: isActivePage ? 500 : undefined,
                           }}>
                             {page.name}
@@ -338,7 +339,7 @@ function ProjectWithPages({
 
                           {/* Approval Badge */}
                           {getPageBadge && getPageBadge(page.id) > 0 && (
-                            <span className="ml-2 text-[10px] font-semibold text-white bg-[#FF0084] rounded-full px-1.5 h-4 min-w-[16px] flex items-center justify-center">
+                            <span className="ml-2 text-[10px] font-semibold text-white bg-primary rounded-full px-1.5 h-4 min-w-[16px] flex items-center justify-center">
                               {getPageBadge(page.id)}
                             </span>
                           )}

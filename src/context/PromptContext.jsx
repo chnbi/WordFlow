@@ -1,9 +1,9 @@
 // PromptContext - Centralized state management for prompt templates
-// Now with PocketBase persistence and Audit Trail
+// Now with Firebase persistence and Audit Trail
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { FileText, Megaphone, Code, Scale, MessageSquare } from 'lucide-react'
-import * as dbService from '@/api/pocketbase'
-import { logAction, AUDIT_ACTIONS } from '@/api/pocketbase'
+import * as dbService from '@/api/firebase'
+import { logAction, AUDIT_ACTIONS } from '@/api/firebase'
 import { toast } from "sonner"
 
 // Safe auth hook - returns null user if auth context not ready
@@ -37,11 +37,11 @@ export function PromptProvider({ children }) {
     const [isLoading, setIsLoading] = useState(true)
     const [dataSource, setDataSource] = useState('loading')
 
-    // Load templates from PocketBase on mount
+    // Load templates from Firebase on mount
     useEffect(() => {
         async function loadData() {
             try {
-                console.log('🔄 [PocketBase] Loading templates...')
+                console.log('[Firebase] Loading templates...')
 
                 // Ensure default template exists
                 await dbService.getOrCreateDefaultTemplate()
@@ -56,10 +56,10 @@ export function PromptProvider({ children }) {
                 }))
 
                 setTemplates(enhanced)
-                setDataSource('pocketbase')
-                console.log('✅ [PocketBase] Loaded', pbTemplates.length, 'templates')
+                setDataSource('firebase')
+                console.log('[Firebase] Loaded', pbTemplates.length, 'templates')
             } catch (error) {
-                console.error('❌ [PocketBase] Error loading templates:', error)
+                console.error('[Firebase] Error loading templates:', error)
                 toast.error("Failed to load templates")
                 setDataSource('error')
             } finally {

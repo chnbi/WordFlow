@@ -4,12 +4,12 @@ import { createContext, useContext, useCallback } from 'react'
 import { useProjectData } from '@/hooks/useProjectData'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useRowSelection } from '@/hooks/useRowSelection'
-import * as dbService from '@/api/pocketbase'
+import * as dbService from '@/api/firebase'
 
 const ProjectContext = createContext(null)
 
 export function ProjectProvider({ children }) {
-    // Data hook - handles all PocketBase CRUD
+    // Data hook - handles all Firebase CRUD
     const data = useProjectData()
 
     // Fetch only APPROVED glossary terms for translation

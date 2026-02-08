@@ -3,6 +3,7 @@
 
 import React from 'react'
 import { Search } from 'lucide-react'
+import { COLORS } from '@/lib/constants'
 
 // ============================================
 // PAGE HEADER
@@ -12,20 +13,25 @@ import { Search } from 'lucide-react'
  * Consistent page title styling
  * @example <PageHeader>Dashboard</PageHeader>
  */
-export function PageHeader({ children, className = '' }) {
+export function PageHeader({ children, description, actions, className = '' }) {
     return (
-        <h1
-            style={{
-                fontSize: '24px',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                marginBottom: '4px',
-                color: 'hsl(222, 47%, 11%)'
-            }}
-            className={className}
-        >
-            {children}
-        </h1>
+        <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 ${className}`}>
+            <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                    {children}
+                </h1>
+                {description && (
+                    <p className="text-muted-foreground mt-1 text-sm">
+                        {description}
+                    </p>
+                )}
+            </div>
+            {actions && (
+                <div className="flex items-center gap-2">
+                    {actions}
+                </div>
+            )}
+        </div>
     )
 }
 
@@ -82,14 +88,14 @@ export function SearchInput({
 // ============================================
 
 const STATUS_COLORS = {
-    draft: '#a1a1aa',      // gray
-    pending: '#a1a1aa',    // gray
-    review: '#f59e0b',     // amber
-    completed: '#10b981',  // green
-    done: '#10b981',       // green
-    approved: '#10b981',   // green
-    error: '#ef4444',      // red
-    rejected: '#ef4444',   // red
+    draft: COLORS.light.darkGrey,      // gray
+    pending: COLORS.light.darkGrey,    // gray
+    review: COLORS.warning,            // amber
+    completed: COLORS.positive,        // green
+    done: COLORS.positive,             // green
+    approved: COLORS.positive,         // green
+    error: COLORS.negative,            // red
+    rejected: COLORS.negative,         // red
 }
 
 const STATUS_LABELS = {

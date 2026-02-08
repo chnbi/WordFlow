@@ -2,12 +2,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { Filter, Check, ChevronDown } from 'lucide-react'
 import { PillButton } from '@/components/ui/shared'
+import { COLORS } from '@/lib/constants'
 
 const DEFAULT_STATUS_OPTIONS = [
-    { id: 'draft', label: 'Draft', color: '#a1a1aa' },
-    { id: 'review', label: 'In Review', color: '#3b82f6' },
-    { id: 'approved', label: 'Approved', color: '#10b981' },
-    { id: 'changes', label: 'Need Changes', color: '#ef4444' },
+    { id: 'draft', label: 'Draft', color: COLORS.light.darkGrey },
+    { id: 'review', label: 'In Review', color: COLORS.blue },
+    { id: 'approved', label: 'Approved', color: COLORS.positive },
+    { id: 'changes', label: 'Need Changes', color: COLORS.negative },
 ]
 
 export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, statusOptions = DEFAULT_STATUS_OPTIONS, className, style }) {
@@ -55,8 +56,8 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
                     alignItems: 'center',
                     gap: '6px',
                     backgroundColor: activeCount > 0 ? 'hsl(340, 82%, 59%, 0.1)' : undefined,
-                    borderColor: activeCount > 0 ? '#FF0084' : undefined,
-                    color: activeCount > 0 ? '#FF0084' : undefined,
+                    borderColor: activeCount > 0 ? COLORS.primary : undefined,
+                    color: activeCount > 0 ? COLORS.primary : undefined,
                     ...style
                 }}
             >
@@ -70,7 +71,7 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
                         minWidth: '18px',
                         height: '18px',
                         borderRadius: '9999px',
-                        backgroundColor: '#FF0084',
+                        backgroundColor: COLORS.primary,
                         color: 'white',
                         fontSize: '11px',
                         fontWeight: 600,
@@ -100,7 +101,7 @@ export function StatusFilterDropdown({ selectedStatuses = [], onStatusChange, st
                                     e.stopPropagation()
                                     clearAll()
                                 }}
-                                className="bg-transparent border-none text-[11px] text-[#FF0084] cursor-pointer hover:underline"
+                                className="bg-transparent border-none text-[11px] text-primary cursor-pointer hover:underline"
                             >
                                 Clear all
                             </button>
@@ -145,7 +146,7 @@ function StatusOption({ status, isSelected, onToggle }) {
             <div className={`
                 w-4 h-4 rounded border flex items-center justify-center pointer-events-none
                 ${isSelected
-                    ? 'border-transparent bg-[#FF0084]'
+                    ? 'border-transparent bg-primary'
                     : 'border-muted-foreground/30 bg-background group-hover:border-muted-foreground/50'}
             `}>
                 {isSelected && <Check style={{ width: '12px', height: '12px', color: 'white' }} />}

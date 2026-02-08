@@ -10,12 +10,12 @@ import { COLORS } from '@/lib/constants'
 // ============================================
 
 export const PROJECT_THEMES = [
-    { id: 'pink', color: COLORS.pink.lightest, border: COLORS.pink.light, iconColor: COLORS.pink.fuchsia },
-    { id: 'orange', color: '#FFF0E5', border: '#FFDAB9', iconColor: '#F97316' },
-    { id: 'yellow', color: COLORS.accents.jasmine + '20', border: COLORS.accents.jasmine, iconColor: '#CA8A04' },
-    { id: 'mint', color: '#E5F9F6', border: '#A7F3D0', iconColor: COLORS.states.positive.DEFAULT },
-    { id: 'cyan', color: '#E5F6FF', border: '#BAE6FD', iconColor: '#0891B2' },
-    { id: 'purple', color: '#F3E5FF', border: '#D8B4FE', iconColor: '#7C3AED' },
+    { id: 'pink', color: COLORS.primaryLightest, border: COLORS.primaryLight, iconColor: COLORS.primary },
+    { id: 'orange', color: '#FFF0E5', border: '#FFDAB9', iconColor: COLORS.salmon },
+    { id: 'yellow', color: COLORS.jasmine + '20', border: COLORS.jasmine, iconColor: COLORS.jasmine },
+    { id: 'mint', color: COLORS.aquamarine + '20', border: COLORS.aquamarine, iconColor: COLORS.positive },
+    { id: 'cyan', color: COLORS.yorkieBlue + '20', border: COLORS.yorkieBlue, iconColor: COLORS.blue },
+    { id: 'purple', color: '#F3E5FF', border: '#D8B4FE', iconColor: COLORS.spaceCadet },
 ]
 
 // Re-export COLORS for backward compatibility
@@ -50,42 +50,115 @@ export function TextInput({ className, ...props }) {
 // BUTTON COMPONENTS
 // ============================================
 
+// ============================================
+// LAYOUT COMPONENTS
+// ============================================
+
+export function PageContainer({ children, className }) {
+    return (
+        <div className={`w-full max-w-[1600px] mx-auto p-6 md:p-8 ${className || ''}`}>
+            {children}
+        </div>
+    )
+}
+
+export function SectionContainer({ children, className }) {
+    return (
+        <div className={`mb-6 flex flex-col gap-4 ${className || ''}`}>
+            {children}
+        </div>
+    )
+}
+
+export function Card({ children, className, noPadding = false }) {
+    return (
+        <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 ${!noPadding ? 'p-6' : ''} ${className || ''}`}>
+            {children}
+        </div>
+    )
+}
+
+// ============================================
+// BUTTON COMPONENTS
+// ============================================
+
 export function PrimaryButton({ children, onClick, disabled, type = 'button', style, className }) {
     return (
-        <Button type={type} onClick={onClick} disabled={disabled} style={style} className={className}>
+        <Button
+            type={type}
+            onClick={onClick}
+            disabled={disabled}
+            style={style}
+            className={`h-10 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-medium transition-all active:scale-[0.98] ${className || ''}`}
+        >
             {children}
         </Button>
     )
 }
 
-export function SecondaryButton({ children, onClick, type = 'button', style, className }) {
-    return (
-        <Button variant="outline" type={type} onClick={onClick} style={style} className={className}>
-            {children}
-        </Button>
-    )
-}
-
-export function IconButton({ children, onClick, title, className }) {
-    return (
-        <Button variant="ghost" size="icon" onClick={onClick} title={title} className={`h-8 w-8 ${className || ''}`}>
-            {children}
-        </Button>
-    )
-}
-
-export function PillButton({ children, onClick, disabled, variant = 'outline', style, className, type = 'button' }) {
+export function SecondaryButton({ children, onClick, type = 'button', style, className, disabled }) {
     return (
         <Button
+            variant="outline"
+            type={type}
+            onClick={onClick}
+            disabled={disabled}
+            style={style}
+            className={`h-10 px-4 py-2 border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl font-medium transition-all active:scale-[0.98] ${className || ''}`}
+        >
+            {children}
+        </Button>
+    )
+}
+
+export const IconButton = React.forwardRef(({ children, onClick, title, className, variant = 'ghost', ...props }, ref) => {
+    return (
+        <Button
+            ref={ref}
+            variant={variant}
+            size="icon"
+            onClick={onClick}
+            title={title}
+            className={`h-8 w-8 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors ${className || ''}`}
+            {...props}
+        >
+            {children}
+        </Button>
+    )
+})
+IconButton.displayName = 'IconButton'
+
+export const PillButton = React.forwardRef(function PillButton({ children, onClick, disabled, variant = 'outline', style, className, type = 'button', ...props }, ref) {
+    return (
+        <Button
+            ref={ref}
             type={type}
             variant={variant === 'outline' ? 'outline' : 'default'}
             onClick={onClick}
             disabled={disabled}
             style={style}
-            className={`rounded-full h-8 px-4 font-normal ${className || ''}`}
+            className={`rounded-full h-8 px-4 text-xs font-medium ${className || ''}`}
+            {...props}
         >
             {children}
         </Button>
+    )
+})
+
+export function Badge({ children, variant = 'default', className }) {
+    const variants = {
+        default: 'bg-gray-100 text-gray-600',
+        primary: 'bg-primary/10 text-primary',
+        success: 'bg-emerald-100 text-emerald-700',
+        warning: 'bg-amber-100 text-amber-700',
+        danger: 'bg-red-100 text-red-700',
+        info: 'bg-blue-100 text-blue-700',
+    }
+
+    return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant] || variants.default} ${className || ''}`}>
+            {children}
+        </span>
     )
 }
 

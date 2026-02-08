@@ -1,5 +1,6 @@
 // GlossaryHighlighter - Reusable component for highlighting glossary terms
 import React, { useMemo } from 'react'
+import { COLORS } from '@/lib/constants'
 
 // Escape special regex characters
 function escapeRegex(str) {
@@ -10,12 +11,14 @@ function escapeRegex(str) {
 export function findGlossaryMatches(text, glossaryTerms, languageCode) {
     if (!text || !glossaryTerms || glossaryTerms.length === 0) return []
 
-    // Map language code to glossary field
+    // Map language code to glossary field (normalized fields from GlossaryContext)
     const fieldMap = {
-        'en': 'english',
-        'my': 'malay',
-        'zh': 'chinese'
+        'en': 'en',
+        'my': 'my',
+        'zh': 'cn', // Context normalizes zh/chinese to 'cn'
+        'cn': 'cn'
     }
+
     const field = fieldMap[languageCode]
     if (!field) return []
 
@@ -99,14 +102,14 @@ export function GlossaryHighlighter({ text, language, glossaryTerms, hoveredTerm
                 onMouseEnter={() => onHover && onHover(match.term.id)}
                 onMouseLeave={() => onHover && onHover(null)}
                 style={{
-                    color: '#FF0084',
+                    color: COLORS.primary,
                     fontWeight: 600,
                     cursor: 'pointer',
                     backgroundColor: isHovered ? 'hsl(329, 100%, 96%)' : 'transparent',
                     borderRadius: '4px',
                     padding: isHovered ? '0 2px' : 0,
                     transition: 'background-color 0.15s ease',
-                    borderBottom: '1.5px dashed #94a3b8', // Visible dashed underline
+                    borderBottom: `1.5px dashed ${COLORS.light.darkGrey}`, // Visible dashed underline
                     paddingBottom: '1px'
                 }}
                 title={`Glossary: ${match.term.english} = ${match.term.malay} / ${match.term.chinese}`}

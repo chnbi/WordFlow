@@ -3,150 +3,21 @@
 import { useState, useMemo } from "react"
 import { useGlossary } from "@/context/GlossaryContext"
 import { usePrompts } from "@/context/PromptContext"
-import { translateBatch } from "@/api/gemini/text"
+import { getAI } from "@/api/ai"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TABLE_STYLES } from "@/components/ui/DataTable"
 import { Loader2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
+import { GlossaryHighlighter } from "@/components/ui/GlossaryHighlighter"
+import { COLORS, PageContainer, Card } from "@/components/ui/shared"
+import { PageHeader } from "@/components/ui/common"
 
 const LANGUAGES = [
     { code: 'en', name: 'English' },
     { code: 'my', name: 'Bahasa Malaysia' },
     { code: 'zh', name: 'Chinese' },
 ]
-
-// Escape special regex characters
-function escapeRegex(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-// Find glossary matches in text
-function findGlossaryMatches(text, glossaryTerms, languageCode) {
-    if (!text || !glossaryTerms || glossaryTerms.length === 0) return []
-
-    // Map language codes to possible field names (check multiple)
-    const fieldMap = {
-        en: ['en', 'english'],
-        my: ['my', 'malay'],
-        zh: ['cn', 'chinese', 'zh']
-    }
-    const fields = fieldMap[languageCode]
-    if (!fields) return []
-
-    const matches = []
-    const notFound = []
-
-    for (const term of glossaryTerms) {
-        // Try multiple field names
-        let termValue = null
-        for (const field of fields) {
-            if (term[field]?.trim()) {
-                termValue = term[field].trim()
-                break
-            }
-        }
-        if (!termValue) {
-            // Track terms missing target language translation
-            if (term.en) notFound.push({ en: term.en, reason: 'No target translation' })
-            continue
-        }
-
-        const pattern = languageCode === 'zh'
-            ? escapeRegex(termValue)
-            : `\\b${escapeRegex(termValue)}\\b`
-
-        const regex = new RegExp(pattern, languageCode === 'zh' ? 'g' : 'gi')
-
-        let match
-        let hasMatch = false
-        while ((match = regex.exec(text)) !== null) {
-            hasMatch = true
-            matches.push({
-                start: match.index,
-                end: match.index + match[0].length,
-                term: term,
-                matchedText: match[0]
-            })
-        }
-
-        // Track terms that have translation but not found in text
-        if (!hasMatch && term.en) {
-            notFound.push({ en: term.en, searched: termValue, reason: 'Not in translated text' })
-        }
-    }
-
-    matches.sort((a, b) => a.start - b.start)
-
-    const filtered = []
-    for (const match of matches) {
-        const lastMatch = filtered[filtered.length - 1]
-        if (!lastMatch || match.start >= lastMatch.end) {
-            filtered.push(match)
-        } else if (match.end - match.start > lastMatch.end - lastMatch.start) {
-            filtered[filtered.length - 1] = match
-        }
-    }
-
-    // Debug log
-    console.log(`[QuickCheck] ${languageCode.toUpperCase()}: Found ${filtered.length} matches:`, filtered.map(m => m.matchedText))
-    if (notFound.length > 0 && languageCode === 'zh') {
-        console.log(`[QuickCheck] ZH terms NOT matched:`, notFound)
-    }
-
-    return filtered
-}
-
-// Render text with highlighted glossary matches (Linked Hover)
-function HighlightedText({ text, matches, hoveredTermId, onHoverTerm }) {
-    if (!text) return null
-    if (!matches || matches.length === 0) {
-        return <span>{text}</span>
-    }
-
-    const parts = []
-    let lastIndex = 0
-
-    for (const match of matches) {
-        if (match.start > lastIndex) {
-            parts.push(
-                <span key={`text-${lastIndex}`}>
-                    {text.slice(lastIndex, match.start)}
-                </span>
-            )
-        }
-
-        const isHovered = hoveredTermId === match.term.id
-
-        parts.push(
-            <span
-                key={`match-${match.start}`}
-                className="font-semibold cursor-default transition-colors px-0.5 rounded-sm"
-                onMouseEnter={() => onHoverTerm && onHoverTerm(match.term.id)}
-                onMouseLeave={() => onHoverTerm && onHoverTerm(null)}
-                style={{
-                    color: '#FF0084',
-                    backgroundColor: isHovered ? 'hsl(329, 100%, 94%)' : 'transparent',
-                    transition: 'background-color 0.15s'
-                }}
-            >
-                {match.matchedText}
-            </span>
-        )
-
-        lastIndex = match.end
-    }
-
-    if (lastIndex < text.length) {
-        parts.push(
-            <span key={`text-${lastIndex}`}>
-                {text.slice(lastIndex)}
-            </span>
-        )
-    }
-
-    return <>{parts}</>
-}
 
 export default function QuickCheck() {
     const { terms: glossaryTerms } = useGlossary()
@@ -172,17 +43,6 @@ export default function QuickCheck() {
         }
     }, [templates])
 
-    // Find matches in source and target text
-    const sourceMatches = useMemo(() =>
-        hasTranslated ? findGlossaryMatches(sourceText, glossaryTerms, sourceLanguage) : [],
-        [sourceText, glossaryTerms, sourceLanguage, hasTranslated]
-    )
-
-    const targetMatches = useMemo(() =>
-        hasTranslated ? findGlossaryMatches(translatedText, glossaryTerms, targetLanguage) : [],
-        [translatedText, glossaryTerms, targetLanguage, hasTranslated]
-    )
-
     const canTranslate = sourceText.trim().length > 0 && !isTranslating
 
     const handleTranslate = async () => {
@@ -193,13 +53,13 @@ export default function QuickCheck() {
         setHasTranslated(false)
 
         try {
-            const results = await translateBatch(
-                [{ id: 1, [sourceLanguage]: sourceText }],
-                defaultTemplate,
+            const results = await getAI().generateBatch(
+                [{ id: 1, text: sourceText }],
                 {
                     sourceLanguage: sourceLanguage,
                     targetLanguages: [targetLanguage],
-                    glossaryTerms: glossaryTerms || []
+                    glossaryTerms: glossaryTerms || [],
+                    template: defaultTemplate
                 }
             )
 
@@ -228,15 +88,8 @@ export default function QuickCheck() {
         setHasTranslated(false)
     }
 
-    // Header row style matching DataTable - using TABLE_STYLES constants
-    const headerStyle = {
-        padding: TABLE_STYLES.headerPadding,
-        backgroundColor: TABLE_STYLES.headerBg,
-        borderBottom: `1px solid ${TABLE_STYLES.borderColor}`,
-        fontSize: '14px',
-        fontWeight: 400,
-        color: TABLE_STYLES.headerText
-    }
+    // Header style using Tailwind
+    const headerClass = "flex items-center gap-3 px-4 py-3.5 bg-gray-50/50 border-b border-gray-100 text-sm text-muted-foreground"
 
     // Scroll sync handler
     const handleScroll = (e) => {
@@ -247,22 +100,20 @@ export default function QuickCheck() {
     }
 
     return (
-        <div className="p-6">
+        <PageContainer>
             {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-foreground">Quick Check</h1>
-            </div>
+            <PageHeader description="Translate text instantly and check against your glossary">Quick Check</PageHeader>
 
             {/* Two Column Layout - Using DataTable container styling */}
-            <div className={TABLE_STYLES.container} style={{ overflow: 'hidden' }}>
-                <div className="grid grid-cols-2">
+            <div className={`${TABLE_STYLES.container} overflow-hidden border border-gray-200 dark:border-slate-800`}>
+                <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-slate-800">
                     {/* Source Panel */}
-                    <div className="border-r border-border/50">
+                    <div className="bg-white dark:bg-slate-900">
                         {/* Header Row */}
-                        <div className="flex items-center gap-3" style={headerStyle}>
+                        <div className="flex items-center gap-3 px-4 py-3.5 bg-gray-50/50 dark:bg-slate-800/50 border-b border-gray-100 dark:border-slate-800 text-sm text-muted-foreground">
                             <span className="whitespace-nowrap">Translate from</span>
                             <Select value={sourceLanguage} onValueChange={(val) => { setSourceLanguage(val); setHasTranslated(false); }}>
-                                <SelectTrigger className="w-40 h-8 bg-transparent border-0 shadow-none">
+                                <SelectTrigger className="w-40 h-8 bg-transparent border-0 shadow-none text-slate-900 dark:text-slate-100 focus:ring-0">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -277,21 +128,18 @@ export default function QuickCheck() {
 
                         {/* Text area container */}
                         <div className="relative h-[280px]">
-                            {/* Highlighted View (View Mode) */}
-                            {hasTranslated && sourceMatches.length > 0 && !isEditing ? (
+                            {hasTranslated && !isEditing ? (
                                 <div
                                     onClick={() => setIsEditing(true)}
-                                    className="w-full h-full p-4 overflow-auto text-sm leading-relaxed whitespace-pre-wrap font-sans cursor-text hover:bg-slate-50 transition-colors"
-                                    style={{
-                                        color: 'inherit'
-                                    }}
+                                    className="w-full h-full p-6 overflow-auto text-sm leading-relaxed whitespace-pre-wrap font-sans cursor-text hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors text-slate-700 dark:text-slate-300"
                                     title="Click to edit"
                                 >
-                                    <HighlightedText
+                                    <GlossaryHighlighter
                                         text={sourceText}
-                                        matches={sourceMatches}
+                                        language={sourceLanguage}
+                                        glossaryTerms={glossaryTerms}
                                         hoveredTermId={hoveredTermId}
-                                        onHoverTerm={setHoveredTermId}
+                                        onHover={setHoveredTermId}
                                     />
                                 </div>
                             ) : (
@@ -304,23 +152,19 @@ export default function QuickCheck() {
                                     }}
                                     autoFocus={isEditing && hasTranslated}
                                     placeholder="Enter text to translate..."
-                                    className="w-full h-full p-4 bg-transparent resize-none border-none focus:ring-0 focus:outline-none text-sm leading-relaxed font-sans"
-                                    style={{
-                                        color: 'inherit',
-                                        caretColor: 'hsl(222, 47%, 11%)'
-                                    }}
+                                    className="w-full h-full p-6 bg-transparent resize-none border-none focus:ring-0 focus:outline-none text-sm leading-relaxed font-sans text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 caret-slate-900 dark:caret-slate-100"
                                 />
                             )}
                         </div>
                     </div>
 
                     {/* Target Panel */}
-                    <div>
+                    <div className="bg-white dark:bg-slate-900">
                         {/* Header Row */}
-                        <div className="flex items-center gap-3" style={headerStyle}>
+                        <div className="flex items-center gap-3 px-4 py-3.5 bg-gray-50/50 dark:bg-slate-800/50 border-b border-gray-100 dark:border-slate-800 text-sm text-muted-foreground">
                             <span className="whitespace-nowrap">Translate to</span>
                             <Select value={targetLanguage} onValueChange={(val) => { setTargetLanguage(val); setHasTranslated(false); }}>
-                                <SelectTrigger className="w-40 h-8 bg-transparent border-0 shadow-none">
+                                <SelectTrigger className="w-40 h-8 bg-transparent border-0 shadow-none text-slate-900 dark:text-slate-100 focus:ring-0">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -334,7 +178,7 @@ export default function QuickCheck() {
                         </div>
 
                         {/* Result area */}
-                        <div className="min-h-[280px] p-4 text-sm leading-relaxed">
+                        <div className="min-h-[280px] p-6 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
                             {isTranslating ? (
                                 <div className="flex items-center text-muted-foreground">
                                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -342,11 +186,12 @@ export default function QuickCheck() {
                                 </div>
                             ) : translatedText ? (
                                 <div className="whitespace-pre-wrap">
-                                    <HighlightedText
+                                    <GlossaryHighlighter
                                         text={translatedText}
-                                        matches={targetMatches}
+                                        language={targetLanguage}
+                                        glossaryTerms={glossaryTerms}
                                         hoveredTermId={hoveredTermId}
-                                        onHoverTerm={setHoveredTermId}
+                                        onHover={setHoveredTermId}
                                     />
                                 </div>
                             ) : (
@@ -360,14 +205,11 @@ export default function QuickCheck() {
             </div>
 
             {/* Centered Translate Button */}
-            <div className="flex justify-center mt-6">
+            <div className="flex justify-center mt-8">
                 <Button
                     onClick={handleTranslate}
                     disabled={!canTranslate}
-                    className="px-6 rounded-full"
-                    style={{
-                        backgroundColor: canTranslate ? '#FF0084' : undefined,
-                    }}
+                    className={`px-8 h-10 rounded-full font-medium transition-all shadow-sm hover:shadow-md ${canTranslate ? 'bg-primary hover:bg-primary-hover text-white' : 'bg-slate-200 text-slate-400'}`}
                 >
                     {isTranslating ? (
                         <>
@@ -382,6 +224,6 @@ export default function QuickCheck() {
                     )}
                 </Button>
             </div>
-        </div>
+        </PageContainer>
     )
 }

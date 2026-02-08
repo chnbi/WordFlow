@@ -1,13 +1,13 @@
-// useProjectData - Hook for managing project data with PocketBase
+// useProjectData - Hook for managing project data with Firebase
 import { useState, useCallback, useEffect } from 'react'
-import * as dbService from '@/api/pocketbase'
-import { logAction, AUDIT_ACTIONS } from '@/api/pocketbase'
+import * as dbService from '@/api/firebase'
+import { logAction, AUDIT_ACTIONS } from '@/api/firebase'
 import { toast } from 'sonner'
 import { useAuth } from '@/App'
 import { LANGUAGES } from '@/lib/constants'
 
 /**
- * Manages project data loading and CRUD operations with PocketBase
+ * Manages project data loading and CRUD operations with Firebase
  * @returns Project data state and handlers
  */
 export function useProjectData() {
@@ -23,11 +23,11 @@ export function useProjectData() {
     useEffect(() => {
         async function loadData() {
             try {
-                console.log('🔄 [PocketBase] Loading projects...')
+                console.log('[Firebase] Loading projects...')
                 const firestoreProjects = await dbService.getProjects()
 
                 if (firestoreProjects.length === 0) {
-                    console.log('📦 [PocketBase] No projects found')
+                    console.log('[Firebase] No projects found')
                     setProjects([])
                     setDataSource('firestore')
                 } else {
@@ -48,7 +48,7 @@ export function useProjectData() {
 
                             // Auto-migrate legacy projects: if has rows but no pages, create Page 1
                             if (pages.length === 0 && unpagedRows && unpagedRows.length > 0) {
-                                console.log(`🔄 [Migration] Project ${project.id} has ${unpagedRows.length} legacy rows, migrating to Page 1...`)
+                                console.log(`[Migration] Project ${project.id} has ${unpagedRows.length} legacy rows, migrating to Page 1...`)
                                 try {
                                     const page = await dbService.addProjectPage(project.id, { name: 'Page 1' })
                                     // Move rows to the new page
@@ -59,9 +59,9 @@ export function useProjectData() {
                                     pageRows[page.id] = unpagedRows
                                     // Update our local reference since they are now paged
                                     allProjectRows = unpagedRows // Content is same, just location changed
-                                    console.log(`✅ [Migration] Successfully migrated ${unpagedRows.length} rows to Page 1`)
+                                    console.log(`[Migration] Successfully migrated ${unpagedRows.length} rows to Page 1`)
                                 } catch (migrationErr) {
-                                    console.error(`❌ [Migration] Failed to migrate project ${project.id}:`, migrationErr)
+                                    console.error(`[Migration] Failed to migrate project ${project.id}:`, migrationErr)
                                 }
                             } else {
                                 // Load page rows normally
@@ -123,10 +123,10 @@ export function useProjectData() {
                     setProjectRows(allRows)
                     setProjectPages(allPagesData)
                     setDataSource('firestore')
-                    console.log('✅ [PocketBase] Loaded', projectsWithStats.length, 'projects')
+                    console.log('[Firebase] Loaded', projectsWithStats.length, 'projects')
                 }
             } catch (error) {
-                console.error('❌ [PocketBase] Error loading data:', error)
+                console.error('❌ [Firebase] Error loading data:', error)
                 toast.error("Failed to load projects from database")
                 setDataSource('error')
                 setProjects([])

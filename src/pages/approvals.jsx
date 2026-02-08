@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Search, Check, X, Undo2 } from "lucide-react"
 import { useProjects } from "@/context/ProjectContext"
 import { useGlossary } from "@/context/GlossaryContext"
-import { COLORS, PrimaryButton } from "@/components/ui/shared"
+import { COLORS, PrimaryButton, PageContainer } from "@/components/ui/shared"
 import { SearchInput } from "@/components/ui/common"
 import { DataTable } from "@/components/ui/DataTable"
 import Pagination from "@/components/Pagination"
@@ -313,7 +313,7 @@ export default function Approvals() {
             accessor: "pageName",
             width: "15%",
             render: (row) => (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div className="flex flex-col gap-0.5">
                     <span className="font-medium text-slate-800 text-sm">
                         {row.pageName || 'Page 1'}
                     </span>
@@ -440,9 +440,9 @@ export default function Approvals() {
     ]
 
     return (
-        <div className="w-full pb-10">
+        <PageContainer>
             {/* Page Title */}
-            <h1 className="text-2xl font-bold tracking-tight mb-1 text-slate-900">
+            <h1 className="text-2xl font-bold tracking-tight mb-4 text-slate-900">
                 Approvals
             </h1>
 
@@ -451,13 +451,13 @@ export default function Approvals() {
                 <button
                     onClick={() => { setActiveTab("projects"); setSelectedIds([]); setLocalApprovals({}) }}
                     className={`flex items-center gap-1.5 pb-3 -mb-3.5 text-sm font-medium transition-colors ${activeTab === "projects"
-                            ? 'text-slate-900 border-b-2 border-[#FF0084]'
-                            : 'text-slate-500 border-b-2 border-transparent hover:text-slate-700'
+                        ? 'text-slate-900 border-b-2 border-primary'
+                        : 'text-slate-500 border-b-2 border-transparent hover:text-slate-700'
                         }`}
                 >
                     Projects
                     {projectReviewRows.length > 0 && (
-                        <span className="bg-[#FF0084] text-white text-[10px] font-bold px-1.5 h-4 flex items-center justify-center rounded-full">
+                        <span className="bg-primary text-white text-[10px] font-bold px-1.5 h-4 flex items-center justify-center rounded-full">
                             {projectReviewRows.length}
                         </span>
                     )}
@@ -465,8 +465,8 @@ export default function Approvals() {
                 <button
                     onClick={() => { setActiveTab("glossary"); setSelectedIds([]); setLocalApprovals({}) }}
                     className={`flex items-center gap-1.5 pb-3 -mb-3.5 text-sm font-medium transition-colors ${activeTab === "glossary"
-                            ? 'text-slate-900 border-b-2 border-[#FF0084]'
-                            : 'text-slate-500 border-b-2 border-transparent hover:text-slate-700'
+                        ? 'text-slate-900 border-b-2 border-primary'
+                        : 'text-slate-500 border-b-2 border-transparent hover:text-slate-700'
                         }`}
                 >
                     Glossary
@@ -488,7 +488,7 @@ export default function Approvals() {
                     />
 
                     <PrimaryButton
-                        style={{ height: '32px', fontSize: '12px', padding: '0 16px' }}
+                        className="h-8 text-xs px-4"
                         onClick={handleSaveItems}
                         disabled={getUpdatesCount() === 0}
                     >
@@ -523,6 +523,6 @@ export default function Approvals() {
                     )}
                 </>
             )}
-        </div>
+        </PageContainer>
     )
 }

@@ -2,15 +2,15 @@ import { createContext, useContext } from 'react';
 import { useAuth as useProductionAuth } from '../hooks/useAuth';
 
 // ===========================================
-// DEV MODE: Set to true to bypass auth
+// DEV MODE: Set via VITE_DEV_AUTH environment variable
 // ===========================================
-export const DEV_BYPASS_AUTH = false;
+export const DEV_BYPASS_AUTH = import.meta.env.VITE_DEV_AUTH === 'true';
 
-// Default dev user
+// Default dev user (only used if VITE_DEV_AUTH is true)
 export const DEFAULT_DEV_USER = {
-    id: 'dev-user-123',
+    id: 'dev-user',
     email: 'dev@example.com',
-    name: 'Dev User',
+    name: 'Developer',
     avatar: null
 };
 

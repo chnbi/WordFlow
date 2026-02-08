@@ -82,7 +82,7 @@ export default {
 				'soft': '0 2px 8px rgba(0,0,0,0.04)',
 			},
 			fontFamily: {
-				sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+				sans: ['Lato', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
 			},
 		}
 	},

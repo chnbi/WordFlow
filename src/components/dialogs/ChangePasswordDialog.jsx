@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useAuth } from '@/App'
-import pb from '@/api/pocketbase/client'
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
+import { auth } from '@/lib/firebase' // Direct auth access needed for reauth if required
+
+// ... (imports remain same except pb)
 
 export default function ChangePasswordDialog({ open, onOpenChange }) {
     const { user } = useAuth()
@@ -31,12 +34,13 @@ export default function ChangePasswordDialog({ open, onOpenChange }) {
 
         setIsLoading(true)
         try {
-            // Update password in PocketBase
-            await pb.collection('users').update(user.id, {
-                oldPassword: currentPassword,
-                password: newPassword,
-                passwordConfirm: confirmPassword
-            })
+            // Firebase requires re-authentication for sensitive operations like password change
+            // verifying the "current password" is correct.
+            const user = auth.currentUser;
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPassword);
 
             toast.success('Password changed successfully!')
 
@@ -47,10 +51,12 @@ export default function ChangePasswordDialog({ open, onOpenChange }) {
             onOpenChange(false)
         } catch (error) {
             console.error('Password change error:', error)
-            if (error.status === 400) {
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 toast.error('Current password is incorrect')
+            } else if (error.code === 'auth/requires-recent-login') {
+                toast.error('Session expired. Please log in again.')
             } else {
-                toast.error('Failed to change password. Please try again.')
+                toast.error('Failed to change password. ' + error.message)
             }
         } finally {
             setIsLoading(false)
