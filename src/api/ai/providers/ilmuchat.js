@@ -18,8 +18,8 @@ export class ILMUchatProvider extends BaseAIProvider {
         this.apiKey = config.apiKey || import.meta.env.VITE_ILMUCHAT_API_KEY;
 
         const defaultEndpoint = import.meta.env.VITE_ILMUCHAT_ENDPOINT || 'https://api.ytlailabs.tech/v1/chat/completions';
-        // ALWAYS use proxy (Vite dev server or Firebase Function) unless explicitly overridden
-        this.endpoint = config.endpoint || '/proxy/ilmuchat/v1/chat/completions';
+        // Use proxy in development to avoid CORS
+        this.endpoint = config.endpoint || (import.meta.env.DEV ? '/proxy/ilmuchat/v1/chat/completions' : defaultEndpoint);
         this.model = config.model || import.meta.env.VITE_ILMUCHAT_MODEL || 'ilmu-trial';
     }
 
