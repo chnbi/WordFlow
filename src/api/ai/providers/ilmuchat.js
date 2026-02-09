@@ -17,10 +17,20 @@ export class ILMUchatProvider extends BaseAIProvider {
         super(config);
         this.apiKey = config.apiKey || import.meta.env.VITE_ILMUCHAT_API_KEY;
 
-        const defaultEndpoint = import.meta.env.VITE_ILMUCHAT_ENDPOINT || 'https://api.ytlailabs.tech/v1/chat/completions';
-        // Use proxy in development to avoid CORS
-        this.endpoint = config.endpoint || (import.meta.env.DEV ? '/proxy/ilmuchat/v1/chat/completions' : defaultEndpoint);
-        this.model = config.model || import.meta.env.VITE_ILMUCHAT_MODEL || 'ilmu-trial';
+        // Get target URL from env or default
+        const targetUrl = config.endpoint || import.meta.env.VITE_ILMUCHAT_ENDPOINT || 'https://api.ytlailabs.tech/preview/v1/chat/completions';
+
+        // Convert strict URL to proxy path for Vercel/Vite handling
+        // e.g. https://api.ytlailabs.tech/preview/v1/... -> /proxy/ilmuchat/preview/v1/...
+        try {
+            const urlObj = new URL(targetUrl);
+            this.endpoint = `/proxy/ilmuchat${urlObj.pathname}`;
+        } catch (e) {
+            // Fallback if relative path provided
+            this.endpoint = targetUrl.startsWith('/') ? targetUrl : `/proxy/ilmuchat/v1/chat/completions`;
+        }
+
+        this.model = config.model || import.meta.env.VITE_ILMUCHAT_MODEL || 'ilmu-preview';
     }
 
     /**
