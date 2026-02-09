@@ -159,16 +159,12 @@ export class ILMUchatProvider extends BaseAIProvider {
         const instructions = template.prompt.replace(/\{\{targetLanguage\}\}/gi, targetLangNames);
         const glossarySection = this._buildGlossarySection(glossaryTerms);
 
-        // DEBUG: Marker to verify ILMU is working
-        const debugInstruction = '\nIMPORTANT: Append " [ILMU]" to the end of every translation text translation so I can verify the provider.\n'
-
         return `You are a professional translator.
 Source Language: ${sourceLangName}
 Target Languages: ${targetLangNames}
 
 ## Instructions
 ${instructions}
-${debugInstruction}
 ${glossarySection}
 
 ## Output Requirements
