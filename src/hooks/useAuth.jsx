@@ -4,6 +4,7 @@ import {
     onAuthStateChanged,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    sendPasswordResetEmail,
     signOut as firebaseSignOut
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -121,6 +122,16 @@ export function AuthProvider({ children }) {
         }
     };
 
+    const resetPassword = async (email) => {
+        try {
+            await sendPasswordResetEmail(auth, email);
+            console.log('[Firebase] Password reset email sent to:', email);
+        } catch (error) {
+            console.error('Reset password error:', error);
+            throw error;
+        }
+    };
+
     // Helper to check if user can perform an action
     const canDo = useCallback((action) => {
         return checkPermission(userRole, action);
@@ -135,6 +146,7 @@ export function AuthProvider({ children }) {
         signUp,
         signInWithOAuth,
         signOut,
+        resetPassword,
         canDo,
         isManager: userRole === ROLES.MANAGER,
         isEditor: userRole === ROLES.EDITOR,

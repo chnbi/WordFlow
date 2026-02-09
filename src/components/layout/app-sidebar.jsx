@@ -171,11 +171,7 @@ const navSettings = [
     icon: FileText,
     // We'll filter this by role in the main component
   },
-  {
-    title: "Account",
-    url: "#settings?section=account",
-    icon: Users,
-  },
+
 ]
 
 // Component for projects with multiple pages (like "5g advanced" in Figma)
@@ -268,35 +264,35 @@ function ProjectWithPages({
                 {project.name}
               </span>
 
-              {/* Hover icons for project */}
-              {hoveredProject && (
-                <div className="flex items-center gap-1 ml-auto" style={{ flexShrink: 0 }}>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={handleDeleteProject}
-                    onKeyDown={(e) => e.key === 'Enter' && handleDeleteProject(e)}
-                    className="p-0.5 hover:bg-rose-100 rounded transition-colors cursor-pointer"
-                    title="Delete project"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-rose-500" />
-                  </span>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={handleAddPage}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddPage(e)}
-                    className="p-0.5 hover:bg-pink-100 rounded transition-colors cursor-pointer"
-                    title="Add page"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-gray-400 hover:text-pink-500" />
-                  </span>
-                </div>
-              )}
+              <div className="ml-auto flex items-center gap-1">
+                {/* Hover icons for project */}
+                {hoveredProject && (
+                  <div className="flex items-center gap-1 mr-1">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={handleDeleteProject}
+                      onKeyDown={(e) => e.key === 'Enter' && handleDeleteProject(e)}
+                      className="p-0.5 hover:bg-rose-100 rounded transition-colors cursor-pointer"
+                      title="Delete project"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-rose-500" />
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={handleAddPage}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddPage(e)}
+                      className="p-0.5 hover:bg-pink-100 rounded transition-colors cursor-pointer"
+                      title="Add page"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-gray-400 hover:text-pink-500" />
+                    </span>
+                  </div>
+                )}
 
-              {!hoveredProject && (
-                <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-              )}
+                <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              </div>
             </SidebarMenuButton>
           </CollapsibleTrigger>
           <CollapsibleContent>

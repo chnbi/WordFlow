@@ -132,25 +132,7 @@ function TopBar({ breadcrumbs }) {
                             Log out
                         </DropdownMenuItem>
 
-                        {/* DEV TOOL: Promote self to Manager */}
-                        {role !== 'manager' && (
-                            <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={async () => {
-                                        if (confirm('Promote self to Manager? This will refresh the page.')) {
-                                            const { updateUserRole } = await import('@/api/firebase/roles');
-                                            await updateUserRole(user.id, 'manager');
-                                            window.location.reload();
-                                        }
-                                    }}
-                                    className="text-purple-600 cursor-pointer"
-                                >
-                                    <Sparkles className="mr-2 h-4 w-4" />
-                                    Dev: Make Manager
-                                </DropdownMenuItem>
-                            </>
-                        )}
+
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

@@ -11,11 +11,18 @@ import Pagination from '@/components/Pagination'
 import { useApprovalNotifications } from "@/hooks/useApprovalNotifications"
 
 export default function Submissions() {
-    const { user } = useAuth()
+    const { user, isManager } = useAuth()
     const { markAsViewed } = useApprovalNotifications()
     const [allSubmissions, setAllSubmissions] = useState([]) // Raw data for stats
     const [isLoading, setIsLoading] = useState(true)
     const [statusFilter, setStatusFilter] = useState('all') // all, review, approved, rejected
+
+    // Redirect Managers to Approvals (or Home)
+    useEffect(() => {
+        if (isManager) {
+            window.location.hash = '#approvals'
+        }
+    }, [isManager])
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1)

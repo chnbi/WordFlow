@@ -1,5 +1,6 @@
 import { useState, useRef } from "react"
 import { Folder, MoreHorizontal, Plus, Upload } from "lucide-react"
+import { PageContainer } from "@/components/ui/shared"
 import NewProjectForm from "@/components/NewProjectForm"
 import { useProjects } from "@/context/ProjectContext"
 import { toast } from "sonner"
@@ -89,28 +90,23 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="w-full pb-10 space-y-8">
+        <PageContainer>
             {/* Page Title */}
-            {/* Page Title */}
-            <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em' }} className="text-foreground">
+            <PageHeader
+                description="Manage your translation projects and view progress."
+            >
                 Overview
-            </h1>
+            </PageHeader>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {[
                     { label: 'Total projects', count: totalProjects },
                     { label: 'Drafts', count: drafts },
                     { label: 'Pending Approval', count: pendingApproval },
                     { label: 'Completed', count: completed }
                 ].map((stat, i) => (
-                    <div key={i} className="rounded-3xl p-6 flex items-center gap-6 h-32 border bg-card/50" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
-                        {/* Note: User previously requested styling, but here we standardize to card/border variables for dark mode compat */}
-                        {/* Actually, the previous pink style was requested. To support dark mode, we must remove hardcoded #FFF0F7 backgrounds if they clash. */}
-                        {/* Let's use a subtle conditional or keep it if it looks okay in dark. Pink #FFF0F7 is very light. In dark mode it will be blinding. */}
-                        {/* Strategy: Use semantic colors, but if they wanted pink, maybe use primary/10? */}
-                        {/* Let's try to keep the requested pink style ONLY in light mode if possible, but simplest is to use card bg. */}
-                        {/* Reverting to 'bg-card' is safest for "Sleek Dark Mode". */}
+                    <div key={i} className="rounded-3xl p-6 flex items-center gap-6 h-32 border bg-card/50 shadow-sm" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
                         <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-primary/10">
                             <Folder className="w-6 h-6 text-primary" />
                         </div>
@@ -133,16 +129,16 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div className="rounded-2xl border-x border-t border-b-0 border-border bg-card overflow-hidden">
+                <div className="rounded-2xl border-x border-t border-b-0 border-border bg-card overflow-hidden shadow-sm">
                     <Table>
                         <TableHeader>
                             <TableRow className="hover:bg-transparent border-b border-border">
-                                <TableHead className="w-[30%] pl-6 bg-card text-muted-foreground">Project</TableHead>
-                                <TableHead className="w-[140px] bg-card text-muted-foreground">Status</TableHead>
-                                <TableHead className="w-[20%] bg-card text-muted-foreground">Progress</TableHead>
+                                <TableHead className="w-[30%] min-w-[200px] pl-6 bg-card text-muted-foreground">Project</TableHead>
+                                <TableHead className="w-[140px] min-w-[140px] bg-card text-muted-foreground">Status</TableHead>
+                                <TableHead className="w-[20%] min-w-[100px] bg-card text-muted-foreground">Progress</TableHead>
                                 <TableHead className="bg-card text-muted-foreground">Last modified</TableHead>
-                                <TableHead className="w-[120px] bg-card text-muted-foreground">Category</TableHead>
-                                <TableHead className="w-[50px] bg-card"></TableHead>
+                                <TableHead className="w-[120px] min-w-[120px] bg-card text-muted-foreground">Category</TableHead>
+                                <TableHead className="w-[50px] min-w-[50px] bg-card"></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -238,6 +234,6 @@ export default function Dashboard() {
                 confirmLabel="Delete"
                 variant="destructive"
             />
-        </div>
+        </PageContainer>
     )
 }

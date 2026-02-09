@@ -10,7 +10,8 @@ import {
     ExternalLink,
     Check,
     Pencil,
-    MoreHorizontal
+    MoreHorizontal,
+    Trash2
 } from "lucide-react"
 import { useAuth } from "@/App"
 import { ROLES, getRoleLabel, getRoleColor } from "@/lib/permissions"
@@ -18,7 +19,15 @@ import { getUsers } from "@/api/firebase"
 import { toast } from "sonner"
 import { PageContainer } from "@/components/ui/shared"
 import { PageHeader } from "@/components/ui/common"
-import EditManagerDialog from "@/components/dialogs/EditManagerDialog"
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { deleteUser } from "@/api/firebase"
 
 export default function UsersPage() {
     const { user: currentUser, isManager } = useAuth()
@@ -29,6 +38,10 @@ export default function UsersPage() {
     // Edit Manager Dialog
     const [editingManager, setEditingManager] = useState(null)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+
+    // Delete User State
+    const [deleteUserId, setDeleteUserId] = useState(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const fetchUsers = useCallback(async () => {
         setIsLoading(true)
@@ -89,13 +102,17 @@ export default function UsersPage() {
             color: 'hsl(220, 9%, 46%)'
         },
         {
-            header: "User",
+            header: "Name",
             accessor: "lastName",
             render: (row) => (
-                <div className="flex flex-col">
-                    <span className="font-medium text-slate-900">{row.firstName} {row.lastName}</span>
-                    <span className="text-xs text-slate-500">{row.email}</span>
-                </div>
+                <span className="font-medium text-slate-900">{row.firstName} {row.lastName}</span>
+            )
+        },
+        {
+            header: "Email",
+            accessor: "email",
+            render: (row) => (
+                <span className="text-slate-500">{row.email}</span>
             )
         },
         {
@@ -116,42 +133,29 @@ export default function UsersPage() {
                 const langs = row.languages || []
                 if (langs.length === 0) return <span className="text-slate-400 text-xs italic">No languages</span>
 
+                // SORTING LOGIC: EN, MY, ZH
+                const sortedLangs = [...langs].sort((a, b) => {
+                    const order = ['en', 'my', 'zh']
+                    return order.indexOf(a) - order.indexOf(b)
+                })
+
                 return (
                     <div className="flex items-center gap-2 group">
                         <div className="flex flex-wrap gap-1">
-                            {langs.slice(0, 3).map(lang => (
+                            {sortedLangs.slice(0, 3).map(lang => (
                                 <span key={lang} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] border border-slate-200">
                                     {lang.toUpperCase()}
                                 </span>
                             ))}
-                            {langs.length > 3 && (
+                            {sortedLangs.length > 3 && (
                                 <span className="px-1.5 py-0.5 bg-slate-50 text-slate-400 rounded text-[10px] border border-slate-100">
-                                    +{langs.length - 3}
+                                    +{sortedLangs.length - 3}
                                 </span>
                             )}
                         </div>
-                        {isManager && (
-                            <button
-                                onClick={() => {
-                                    setEditingManager(row)
-                                    setIsEditDialogOpen(true)
-                                }}
-                                className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:text-primary hover:bg-primary/10 opacity-0 group-hover:opacity-100 transition-all"
-                                title="Edit Languages"
-                            >
-                                <Pencil className="w-3 h-3" />
-                            </button>
-                        )}
                     </div>
                 )
             }
-        },
-        {
-            header: "Login history",
-            accessor: "loginHistory",
-            width: "120px",
-            align: "center",
-            render: () => <ExternalLink className="w-4 h-4 text-slate-400 cursor-pointer hover:text-primary" />
         },
         // We'll add an action column for editing if needed, but the request was "allow them to amend"
         // Since we are reusing UserManagementDialog or a new one, we need an edit button.
@@ -160,7 +164,35 @@ export default function UsersPage() {
             accessor: "actions",
             width: "50px",
             render: (row) => (
-                <MoreHorizontal className="w-4 h-4 text-slate-400 cursor-pointer hover:text-slate-600" />
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        {row.role === ROLES.MANAGER && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setEditingManager(row)
+                                    setIsEditDialogOpen(true)
+                                }}
+                            >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Languages
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                            onClick={() => setDeleteUserId(row.id)}
+                            className="text-red-600 focus:text-red-600"
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete User
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )
         }
     ]
@@ -243,6 +275,30 @@ export default function UsersPage() {
                 onSuccess={() => {
                     fetchUsers() // Refresh list to show new languages
                 }}
+            />
+
+            <ConfirmDialog
+                open={!!deleteUserId}
+                onClose={() => setDeleteUserId(null)}
+                onConfirm={async () => {
+                    if (!deleteUserId) return
+                    setIsDeleting(true)
+                    try {
+                        await deleteUser(deleteUserId)
+                        toast.success("User deleted successfully")
+                        fetchUsers()
+                    } catch (error) {
+                        console.error(error)
+                        toast.error("Failed to delete user")
+                    } finally {
+                        setIsDeleting(false)
+                        setDeleteUserId(null)
+                    }
+                }}
+                title="Delete User"
+                message="Are you sure you want to delete this user? This action cannot be undone."
+                confirmLabel={isDeleting ? "Deleting..." : "Delete"}
+                variant="destructive"
             />
         </PageContainer>
     )

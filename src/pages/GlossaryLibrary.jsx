@@ -241,10 +241,10 @@ export default function Glossary() {
     const endIndex = startIndex + itemsPerPage
     const paginatedTerms = sortedTerms.slice(startIndex, endIndex)
 
-    // Reset page when filter/search changes
+    // Reset page when filter/search changes or items per page changes
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchQuery, activeCategory, statusFilter])
+    }, [searchQuery, activeCategory, statusFilter, itemsPerPage])
 
     // Compute button state conditions
     // hasTerms uses ORIGINAL terms - for UI elements that should always show (like Filter button)
@@ -537,7 +537,7 @@ export default function Glossary() {
             width: "22%",
             sortable: true,
             render: (row) => (
-                <div className="whitespace-pre-wrap">
+                <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
                     <GlossaryHighlighter
                         text={row.en || ''}
                         language="en"
@@ -554,7 +554,7 @@ export default function Glossary() {
             width: "22%",
             sortable: true,
             render: (row) => (
-                <div className="whitespace-pre-wrap">
+                <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
                     <GlossaryHighlighter
                         text={row.my || ''}
                         language="my"
@@ -571,7 +571,7 @@ export default function Glossary() {
             width: "22%",
             sortable: true,
             render: (row) => (
-                <div className="whitespace-pre-wrap">
+                <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
                     <GlossaryHighlighter
                         text={row.cn || ''}
                         language="zh"
@@ -586,6 +586,7 @@ export default function Glossary() {
             header: "Status",
             accessor: "status",
             width: "120px",
+            minWidth: "120px",
             render: (row) => {
                 const config = getStatusConfig(row.status)
                 if (!config) {
@@ -605,7 +606,8 @@ export default function Glossary() {
         ...(hasRemarks ? [{
             header: "Remarks",
             accessor: "remark",
-            width: "15%",
+            width: "200px",
+            minWidth: "150px",
             render: (row) => {
                 const rawRemark = row.remark || row.remarks
                 const remarkText = rawRemark ? String(rawRemark) : ''
@@ -622,7 +624,8 @@ export default function Glossary() {
         {
             header: "Category",
             accessor: "category",
-            width: "10%",
+            width: "120px",
+            minWidth: "120px",
             render: (row) => (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
                     {row.category || 'General'}
@@ -632,7 +635,8 @@ export default function Glossary() {
         {
             header: "Template",
             accessor: "promptId",
-            width: "12%",
+            width: "150px",
+            minWidth: "150px",
             render: (row) => {
                 return (
                     <PromptCategoryDropdown
@@ -653,7 +657,8 @@ export default function Glossary() {
         {
             header: "",
             accessor: "actions",
-            width: "5%",
+            width: "80px",
+            minWidth: "80px",
             render: (row) => (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -692,150 +697,154 @@ export default function Glossary() {
 
                 {/* Page Title */}
                 {/* Page Title */}
-                {/* Page Title */}
-                <PageHeader
-                    description="Manage your translation terms and definitions"
-                    actions={
-                        canDo(ACTIONS.CREATE_GLOSSARY) && (
-                            <PrimaryButton onClick={handleCreate}>
-                                <Plus className="w-4 h-4 mr-2" />
-                                New Term
-                            </PrimaryButton>
-                        )
-                    }
-                >
-                    Glossary
-                </PageHeader>
+                {/* Header & Controls Wrapper - Standardized Spacing */}
+                <div className="flex flex-col gap-6 mb-8">
+                    <PageHeader
+                        description="Manage your translation terms and definitions"
+                        actions={
+                            canDo(ACTIONS.CREATE_GLOSSARY) && (
+                                <PrimaryButton onClick={handleCreate}>
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    New Term
+                                </PrimaryButton>
+                            )
+                        }
+                    >
+                        Glossary
+                    </PageHeader>
 
-                {/* Category Filter Tags */}
-                <div className="flex gap-2 my-4 overflow-x-auto pb-1 no-scrollbar">
-                    {['All', ...new Set([
-                        'General',
-                        ...dynamicCategories.map(c => c.name || c),
-                        ...(terms || []).map(t => t.category).filter(Boolean)
-                    ])].filter(c => c).map(category => (
-                        <button
-                            key={category}
-                            onClick={() => setActiveCategory(category)}
-                            className={`px-4 py-2 rounded-full text-[13px] font-medium border-none cursor-pointer whitespace-nowrap transition-all duration-150 ${activeCategory === category ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                        >
-                            {category}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Action Bar */}
-                <div className="flex items-center justify-between pb-4">
-                    <span className="text-sm text-muted-foreground">
-                        {selectedIds.length > 0 ? `${selectedIds.length} row(s) selected` : `${filteredTerms.length} row(s)`}
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                        {/* Search */}
-                        <SearchInput
-                            value={searchQuery}
-                            onChange={setSearchQuery}
-                            placeholder="Search"
-                            width="200px" // Matched Prompt Library EXACTLY
-                        />
-
-
-
-                        {/* Filter - only show if there are terms AND no selection */}
-                        {hasTerms && !hasSelection && (
-                            <StatusFilterDropdown
-                                selectedStatuses={statusFilter}
-                                onStatusChange={setStatusFilter}
-                                className="h-8 border-border"
-                            />
-                        )}
-
-                        {/* Import - always shown unless selection active */}
-                        {canDo(ACTIONS.CREATE_GLOSSARY) && !hasSelection && (
-                            <PillButton
-                                variant="outline"
-                                onClick={() => setIsImportOpen(true)}
+                    {/* Category Filter Tags */}
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        {['All', ...new Set([
+                            'General',
+                            ...dynamicCategories.map(c => c.name || c),
+                            ...(terms || []).map(t => t.category).filter(Boolean)
+                        ])].filter(c => c).map(category => (
+                            <button
+                                key={category}
+                                onClick={() => setActiveCategory(category)}
+                                className={`px-4 py-2 rounded-full text-[13px] font-medium border-none cursor-pointer whitespace-nowrap transition-all duration-150 ${activeCategory === category ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                             >
-                                <Upload style={{ width: '16px', height: '16px' }} /> Import
-                            </PillButton>
-                        )}
+                                {category}
+                            </button>
+                        ))}
+                    </div>
 
-                        {/* Selection Actions */}
-                        {hasSelection && (
-                            <>
+                    {/* Action Bar */}
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                            {selectedIds.length > 0 ? `${selectedIds.length} row(s) selected` : `${filteredTerms.length} row(s)`}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                            {/* Search */}
+                            <SearchInput
+                                value={searchQuery}
+                                onChange={setSearchQuery}
+                                placeholder="Search"
+                                width="200px" // Matched Prompt Library EXACTLY
+                            />
+
+
+
+                            {/* Filter - only show if there are terms AND no selection */}
+                            {hasTerms && !hasSelection && (
+                                <StatusFilterDropdown
+                                    selectedStatuses={statusFilter}
+                                    onStatusChange={setStatusFilter}
+                                    className="h-8 px-4 text-xs border-border"
+                                />
+                            )}
+
+                            {/* Import - always shown unless selection active */}
+                            {canDo(ACTIONS.CREATE_GLOSSARY) && !hasSelection && (
                                 <PillButton
                                     variant="outline"
-                                    onClick={() => setBulkDeleteConfirm(true)}
+                                    onClick={() => setIsImportOpen(true)}
+                                    className="ml-2"
                                 >
-                                    <Trash2 style={{ width: '16px', height: '16px' }} /> Delete {selectedIds.length}
+                                    <Upload className="w-3.5 h-3.5 mr-2" /> Import
                                 </PillButton>
+                            )}
 
-                                {/* Translate Selected (if not approved/filled?) - Keeping existing logic "Translate {N}" */}
-                                {!allApproved && (
-                                    <PrimaryButton
-                                        style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium, marginLeft: '8px' }}
-                                        onClick={handleTranslateAll}
-                                        disabled={isTranslating}
+                            {/* Selection Actions */}
+                            {hasSelection && (
+                                <>
+                                    <PillButton
+                                        variant="outline"
+                                        onClick={() => setBulkDeleteConfirm(true)}
+                                        className="ml-2 text-destructive border-destructive/20 hover:bg-destructive/10"
                                     >
-                                        <span style={{ fontSize: '14px' }}>✦</span> Translate {selectedIds.length}
-                                    </PrimaryButton>
-                                )}
+                                        <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete {selectedIds.length}
+                                    </PillButton>
 
-                                {/* Send to Review - Only if selected rows are filled - RIGHTMOST */}
-                                {selectionFilled && (
-                                    <PrimaryButton
-                                        style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
-                                        onClick={handleSendForReview}
-                                    >
-                                        <Send style={{ width: '14px', height: '14px' }} /> Send {selectedIds.length} to Review
-                                    </PrimaryButton>
-                                )}
-                            </>
-                        )}
+                                    {/* Translate Selected */}
+                                    {!allApproved && (
+                                        <PrimaryButton
+                                            className="h-8 text-xs px-4 ml-2 bg-blue-600 hover:bg-blue-700"
+                                            onClick={handleTranslateAll}
+                                            disabled={isTranslating}
+                                        >
+                                            <span className="text-sm mr-1">✦</span> Translate {selectedIds.length}
+                                        </PrimaryButton>
+                                    )}
 
-                        {/* Export - Available when NO selection and ALL FILLED */}
-                        {hasFilteredTerms && !hasSelection && allFilled && (
-                            <PillButton
-                                variant="outline"
-                                style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
-                                onClick={handleExport}
-                            >
-                                <Download style={{ width: '14px', height: '14px' }} /> Export
-                            </PillButton>
-                        )}
+                                    {/* Send to Review */}
+                                    {selectionFilled && (
+                                        <PrimaryButton
+                                            className="h-8 text-xs px-4 ml-2"
+                                            onClick={handleSendForReview}
+                                        >
+                                            <Send className="w-3.5 h-3.5 mr-2" /> Send {selectedIds.length} to Review
+                                        </PrimaryButton>
+                                    )}
+                                </>
+                            )}
 
-                        {/* Translate No Selection */}
-                        {hasFilteredTerms && !hasSelection && !allFilled && (
-                            <PrimaryButton
-                                style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium, marginLeft: '8px' }}
-                                onClick={handleTranslateAll}
-                                disabled={isTranslating}
-                            >
-                                {isTranslating ? (
-                                    <><Loader2 style={{ width: '14px', height: '14px', marginRight: '4px', animation: 'spin 1s linear infinite' }} /> Translating...</>
-                                ) : (
-                                    <><span style={{ fontSize: '14px' }}>✦</span> Translate</>
-                                )}
-                            </PrimaryButton>
-                        )}
+                            {/* Export - Available when NO selection and ALL FILLED */}
+                            {hasFilteredTerms && !hasSelection && allFilled && (
+                                <PillButton
+                                    variant="outline"
+                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
+                                    onClick={handleExport}
+                                >
+                                    <Download style={{ width: '14px', height: '14px' }} /> Export
+                                </PillButton>
+                            )}
 
-                        {/* Send for Review No Selection */}
-                        {hasFilteredTerms && !hasSelection && allTranslated && !allApproved && (
-                            <PrimaryButton
-                                style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
-                                onClick={handleSendForReview}
-                                disabled={isTranslating}
-                            >
-                                <Send style={{ width: '14px', height: '14px' }} /> Send for Review
-                            </PrimaryButton>
-                        )}
+                            {/* Translate No Selection */}
+                            {hasFilteredTerms && !hasSelection && !allFilled && (
+                                <PrimaryButton
+                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', backgroundColor: COLORS.blueMedium, marginLeft: '8px' }}
+                                    onClick={handleTranslateAll}
+                                    disabled={isTranslating}
+                                >
+                                    {isTranslating ? (
+                                        <><Loader2 style={{ width: '14px', height: '14px', marginRight: '4px', animation: 'spin 1s linear infinite' }} /> Translating...</>
+                                    ) : (
+                                        <><span style={{ fontSize: '14px' }}>✦</span> Translate</>
+                                    )}
+                                </PrimaryButton>
+                            )}
+
+                            {/* Send for Review No Selection */}
+                            {hasFilteredTerms && !hasSelection && allTranslated && !allApproved && (
+                                <PrimaryButton
+                                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', marginLeft: '8px' }}
+                                    onClick={handleSendForReview}
+                                    disabled={isTranslating}
+                                >
+                                    <Send style={{ width: '14px', height: '14px' }} /> Send for Review
+                                </PrimaryButton>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 {/* DataTable */}
                 <DataTable
                     columns={columns}
-                    data={filteredTerms}
+                    data={paginatedTerms}
                     selectedIds={selectedIds}
                     onToggleSelect={toggleSelect}
                     onToggleSelectAll={toggleSelectAll}

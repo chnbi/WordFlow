@@ -10,8 +10,8 @@ import { xml2js } from 'xml-js';
 import * as pdfjsLib from 'pdfjs-dist';
 import { LANGUAGES } from '@/lib/constants';
 
-// Set worker source for PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Set worker source for PDF.js - Use local public file to avoid CDN CORS/version issues
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 /**
  * Parse a PDF file and extract text content

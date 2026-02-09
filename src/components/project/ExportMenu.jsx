@@ -24,9 +24,9 @@ export function ExportMenu({
             <DropdownMenuTrigger asChild>
                 <PillButton
                     variant="outline"
-                    style={{ height: '32px', fontSize: '12px', padding: '0 16px', ...style }}
+                    className={style}
                 >
-                    <Download style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Export
+                    <Download className="w-3.5 h-3.5 mr-2" /> Export
                 </PillButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

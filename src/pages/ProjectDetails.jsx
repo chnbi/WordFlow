@@ -179,10 +179,10 @@ export default function ProjectView({ projectId }) {
     const selectedCount = selectedRowIds.size
     const hasSelection = selectedCount > 0
 
-    // Reset to page 1 when filters change
+    // Reset to page 1 when filters change or items per page changes
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchQuery, statusFilter.length, currentPageId])
+    }, [searchQuery, statusFilter.length, currentPageId, itemsPerPage])
 
     // targetLanguages is already declared above near project fetch
 
@@ -799,7 +799,7 @@ export default function ProjectView({ projectId }) {
                                 value={editingRowData?.en || editingRowData?.text || ''}
                                 onChange={(e) => setEditingRowData(prev => ({ ...prev, en: e.target.value }))}
                                 onKeyDown={handleEditKeyDown}
-                                className="w-full h-full min-h-[80px] bg-white resize-y p-3 rounded-lg border border-primary/40 focus:border-primary focus:ring-4 focus:ring-primary/10 shadow-sm transition-all"
+                                className="w-full h-full min-h-[80px] bg-white resize-y p-3 rounded-lg border border-primary/40 focus:border-primary focus:ring-4 focus:ring-primary/10 shadow-sm transition-all text-[13px] leading-relaxed"
                                 placeholder="Enter source text..."
                                 autoFocus
                             />
@@ -807,7 +807,7 @@ export default function ProjectView({ projectId }) {
                     )
                 }
                 return (
-                    <div className="whitespace-pre-wrap">
+                    <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
                         <GlossaryHighlighter
                             text={row.source_text || row.en || row.text || ''}
                             language="en"
@@ -833,7 +833,7 @@ export default function ProjectView({ projectId }) {
                                 value={editingRowData?.[langCode] || ''}
                                 onChange={(e) => setEditingRowData(prev => ({ ...prev, [langCode]: e.target.value }))}
                                 onKeyDown={handleEditKeyDown}
-                                className="w-full h-full min-h-[80px] bg-white resize-y p-3 rounded-lg border border-primary/40 focus:border-primary focus:ring-4 focus:ring-primary/10 shadow-sm transition-all"
+                                className="w-full h-full min-h-[80px] bg-white resize-y p-3 rounded-lg border border-primary/40 focus:border-primary focus:ring-4 focus:ring-primary/10 shadow-sm transition-all text-[13px] leading-relaxed"
                                 placeholder="Enter translation..."
                                 autoFocus
                             />
@@ -843,7 +843,7 @@ export default function ProjectView({ projectId }) {
                 // Read from translations JSON first, fallback to legacy field
                 const displayText = row.translations?.[langCode]?.text || row[langCode] || ''
                 return (
-                    <div className="whitespace-pre-wrap">
+                    <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
                         <GlossaryHighlighter
                             text={displayText || '—'}
                             language={langCode}
@@ -867,7 +867,8 @@ export default function ProjectView({ projectId }) {
         {
             header: "Status",
             accessor: "status",
-            width: "140px", // Increased to prevent wrapping
+            width: "140px",
+            minWidth: "140px",
             render: (row) => {
                 const config = getStatusConfig(row.status)
                 return (
@@ -876,7 +877,7 @@ export default function ProjectView({ projectId }) {
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: config.color }}
                         />
-                        <span className="text-sm text-slate-500 font-medium">
+                        <span className="text-[13px] text-slate-500 font-medium">
                             {config.label}
                         </span>
                     </div>
@@ -895,7 +896,7 @@ export default function ProjectView({ projectId }) {
                 if (!remarkText.trim()) return <span style={{ color: 'hsl(220, 13%, 91%)' }}>—</span>
 
                 return (
-                    <div className="text-sm text-slate-500 italic truncate max-w-[200px]" title={remarkText}>
+                    <div className="text-[13px] text-slate-500 italic truncate max-w-[200px]" title={remarkText}>
                         {remarkText}
                     </div>
                 )
@@ -904,7 +905,8 @@ export default function ProjectView({ projectId }) {
         {
             header: "Template",
             accessor: "promptId",
-            width: "120px",
+            width: "150px",
+            minWidth: "150px",
             render: (row) => (
                 <PromptCategoryDropdown
                     currentPromptId={row.promptId}
@@ -920,7 +922,9 @@ export default function ProjectView({ projectId }) {
         {
             header: "",
             accessor: "actions",
-            width: "50px",
+            width: "80px",
+            minWidth: "80px",
+            align: "center",
             render: (row) => {
                 if (row.id === editingRowId) {
                     return (
@@ -1116,7 +1120,7 @@ export default function ProjectView({ projectId }) {
             {/* DataTable with appended "Add Row" support */}
             <DataTable
                 columns={columns}
-                data={rows}
+                data={paginatedRows}
                 selectedIds={selectedRowIds}
                 onToggleSelect={(id) => toggleRowSelection(project.id, id)}
                 onToggleSelectAll={handleSelectAll}

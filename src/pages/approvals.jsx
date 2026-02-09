@@ -4,7 +4,7 @@ import { Search, Check, X, Undo2 } from "lucide-react"
 import { useProjects } from "@/context/ProjectContext"
 import { useGlossary } from "@/context/GlossaryContext"
 import { COLORS, PrimaryButton, PageContainer } from "@/components/ui/shared"
-import { SearchInput } from "@/components/ui/common"
+import { SearchInput, PageHeader } from "@/components/ui/common"
 import { DataTable } from "@/components/ui/DataTable"
 import Pagination from "@/components/Pagination"
 import { toast } from "sonner"
@@ -44,7 +44,7 @@ export default function Approvals() {
     useEffect(() => {
         if (isManager) {
             getUsers().then(users => {
-                const mgrs = users.filter(u => u.role === 'manager' || u.role === 'admin')
+                const mgrs = users.filter(u => (u.role === 'manager' || u.role === 'admin') && u.id !== user?.id)
                 setManagers(mgrs)
             })
         }
@@ -405,11 +405,11 @@ export default function Approvals() {
             accessor: "pageName",
             width: "15%",
             render: (row) => (
-                <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-slate-800 text-sm">
+                <div className="flex flex-col gap-1">
+                    <span className="font-medium text-slate-900 text-[13px]">
                         {row.pageName || 'Page 1'}
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-[12px] text-slate-500">
                         {row.projectName}
                     </span>
                 </div>
@@ -420,7 +420,7 @@ export default function Approvals() {
             accessor: "en",
             width: "20%",
             render: (row) => (
-                <div className="text-sm text-slate-700">
+                <div className="text-[13px] text-slate-700 leading-relaxed">
                     {row.source_text || row.en || ''}
                 </div>
             )
@@ -462,7 +462,7 @@ export default function Approvals() {
 
                 return (
                     <div className={`flex flex-col gap-2 group ${!canReview ? 'opacity-60' : ''}`}>
-                        <div className="text-sm text-slate-700 min-h-[20px]">
+                        <div className="text-[13px] text-slate-700 leading-relaxed min-h-[20px]">
                             {translation.text || <span className="text-slate-300 italic">Empty</span>}
                         </div>
 
@@ -496,7 +496,7 @@ export default function Approvals() {
 
                             {/* Action Buttons */}
                             {canReview && (
-                                <div className="flex items-center gap-1 opacity-100 transition-opacity">
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {localStatus ? (
                                         <>
                                             <button
@@ -512,7 +512,7 @@ export default function Approvals() {
                                                 className="p-1 hover:bg-blue-50 rounded text-slate-300 hover:text-blue-600 transition-colors"
                                                 title="Reassign"
                                             >
-                                                <UserPlus className="w-4 h-4" />
+                                                <UserPlus className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => {
@@ -523,7 +523,7 @@ export default function Approvals() {
                                                 className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600"
                                                 title="Undo"
                                             >
-                                                <Undo2 className="w-4 h-4" />
+                                                <Undo2 className="w-3.5 h-3.5" />
                                             </button>
                                         </>
                                     ) : (
@@ -541,21 +541,21 @@ export default function Approvals() {
                                                 className="p-1 hover:bg-blue-50 rounded text-slate-300 hover:text-blue-600 transition-colors"
                                                 title="Reassign"
                                             >
-                                                <UserPlus className="w-4 h-4" />
+                                                <UserPlus className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => updateLocalStatus(row.id, lang, 'approved')}
                                                 className="p-1 hover:bg-emerald-100 rounded text-slate-300 hover:text-emerald-600 transition-colors"
                                                 title="Approve"
                                             >
-                                                <Check className="w-4 h-4" />
+                                                <Check className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => updateLocalStatus(row.id, lang, 'rejected')}
                                                 className="p-1 hover:bg-rose-100 rounded text-slate-300 hover:text-rose-600 transition-colors"
                                                 title="Request Changes"
                                             >
-                                                <X className="w-4 h-4" />
+                                                <X className="w-3.5 h-3.5" />
                                             </button>
                                         </>
                                     )}
@@ -580,9 +580,24 @@ export default function Approvals() {
     ], [uniqueTargetLanguages, localApprovals, localRemarks, filteredProjectReviewRows, user, role]) // Add deps
 
     const glossaryColumns = [
-        { header: "English", accessor: "en", width: "25%" },
-        { header: "Bahasa Malaysia", accessor: "my", width: "25%" },
-        { header: "Chinese", accessor: "cn", width: "25%" },
+        {
+            header: "English",
+            accessor: "en",
+            width: "25%",
+            render: (row) => <div className="text-[13px] text-slate-700">{row.en}</div>
+        },
+        {
+            header: "Bahasa Malaysia",
+            accessor: "my",
+            width: "25%",
+            render: (row) => <div className="text-[13px] text-slate-700">{row.my}</div>
+        },
+        {
+            header: "Chinese",
+            accessor: "cn",
+            width: "25%",
+            render: (row) => <div className="text-[13px] text-slate-700">{row.cn}</div>
+        },
         {
             header: "Actions",
             accessor: "actions",
@@ -633,37 +648,39 @@ export default function Approvals() {
 
     return (
         <PageContainer>
-            {/* Page Title */}
-            <h1 className="text-2xl font-bold tracking-tight mb-4 text-slate-900">
+            {/* Page Header */}
+            <PageHeader
+                description="Review and manage translations pending approval."
+                actions={
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                        <button
+                            onClick={() => { setActiveTab("projects"); setSelectedIds([]); setLocalApprovals({}) }}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === "projects"
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            Projects
+                            {projectReviewRows.length > 0 && (
+                                <span className="ml-2 bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                    {projectReviewRows.length}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => { setActiveTab("glossary"); setSelectedIds([]); setLocalApprovals({}) }}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === "glossary"
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            Glossary
+                        </button>
+                    </div>
+                }
+            >
                 Approvals
-            </h1>
-
-            {/* Tabs */}
-            <div className="flex items-center gap-6 py-3 border-b border-slate-100">
-                <button
-                    onClick={() => { setActiveTab("projects"); setSelectedIds([]); setLocalApprovals({}) }}
-                    className={`flex items-center gap-1.5 pb-3 -mb-3.5 text-sm font-medium transition-colors ${activeTab === "projects"
-                        ? 'text-slate-900 border-b-2 border-primary'
-                        : 'text-slate-500 border-b-2 border-transparent hover:text-slate-700'
-                        }`}
-                >
-                    Projects
-                    {projectReviewRows.length > 0 && (
-                        <span className="bg-primary text-white text-[10px] font-bold px-1.5 h-4 flex items-center justify-center rounded-full">
-                            {projectReviewRows.length}
-                        </span>
-                    )}
-                </button>
-                <button
-                    onClick={() => { setActiveTab("glossary"); setSelectedIds([]); setLocalApprovals({}) }}
-                    className={`flex items-center gap-1.5 pb-3 -mb-3.5 text-sm font-medium transition-colors ${activeTab === "glossary"
-                        ? 'text-slate-900 border-b-2 border-primary'
-                        : 'text-slate-500 border-b-2 border-transparent hover:text-slate-700'
-                        }`}
-                >
-                    Glossary
-                </button>
-            </div>
+            </PageHeader>
 
             {/* Action Bar */}
             <div className="flex items-center justify-between mb-4 mt-6">

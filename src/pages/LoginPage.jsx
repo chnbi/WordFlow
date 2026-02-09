@@ -6,23 +6,32 @@ import { AlertCircle, Check } from 'lucide-react'
 import { COLORS, LANGUAGES } from '@/lib/constants'
 
 export default function LoginPage() {
-    const { signIn, signUp } = useAuth()
+    const { signIn, signUp, resetPassword } = useAuth()
     const [isSignUp, setIsSignUp] = useState(false)
+    const [isForgotPassword, setIsForgotPassword] = useState(false)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [name, setName] = useState('')
     const [role, setRole] = useState(ROLES.EDITOR)
     const [selectedLanguages, setSelectedLanguages] = useState(['en']) // Default to English
 
     const [error, setError] = useState('')
+    const [success, setSuccess] = useState('')
     const [loading, setLoading] = useState(false)
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         setError('')
+        setSuccess('')
         setLoading(true)
 
         try {
+            if (isForgotPassword) {
+                await resetPassword(email)
+                setSuccess('Password reset email sent! Check your inbox.')
+                setLoading(false)
+                return
+            }
+
             if (isSignUp) {
                 await signUp(email, password, {
                     role,
@@ -47,7 +56,6 @@ export default function LoginPage() {
             }
 
             setError(errorMessage)
-        } finally {
             setLoading(false)
         }
     }
@@ -118,21 +126,30 @@ export default function LoginPage() {
                         color: 'hsl(220, 9%, 46%)',
                         margin: 0
                     }}>
-                        {isSignUp ? 'Create your account' : 'Sign in to your account'}
+                        {isForgotPassword
+                            ? 'Reset your password'
+                            : (isSignUp ? 'Create your account' : 'Sign in to your account')
+                        }
                     </p>
                 </div>
 
-                {/* Error Message */}
+                {/* Messages */}
                 {error && (
                     <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl mb-5 text-rose-700 text-sm">
                         <AlertCircle className="w-4 h-4 shrink-0" />
                         {error}
                     </div>
                 )}
+                {success && (
+                    <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl mb-5 text-emerald-700 text-sm">
+                        <Check className="w-4 h-4 shrink-0" />
+                        {success}
+                    </div>
+                )}
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Basic Fields */}
+                    {/* Email Field */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
                         <input
@@ -145,21 +162,38 @@ export default function LoginPage() {
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            minLength={6}
-                            placeholder="••••••••"
-                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all text-sm"
-                        />
-                    </div>
+                    {!isForgotPassword && (
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-sm font-medium text-slate-700">Password</label>
+                                {!isSignUp && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsForgotPassword(true)
+                                            setError('')
+                                            setSuccess('')
+                                        }}
+                                        className="text-xs font-semibold text-pink-600 hover:text-pink-700 hover:underline tabindex-[-1]"
+                                    >
+                                        Forgot Password?
+                                    </button>
+                                )}
+                            </div>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                minLength={6}
+                                placeholder="••••••••"
+                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all text-sm"
+                            />
+                        </div>
+                    )}
 
                     {/* Sign Up Exclusive Fields */}
-                    {isSignUp && (
+                    {isSignUp && !isForgotPassword && (
                         <div className="space-y-4 pt-2 border-t border-slate-100 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
                             {/* Role Selection */}
                             <div>
@@ -169,8 +203,8 @@ export default function LoginPage() {
                                         type="button"
                                         onClick={() => setRole(ROLES.EDITOR)}
                                         className={`flex items-center justify-center py-2.5 px-4 rounded-xl border text-sm font-medium transition-all ${role === ROLES.EDITOR
-                                                ? 'bg-pink-50 border-pink-200 text-pink-700'
-                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                            ? 'bg-pink-50 border-pink-200 text-pink-700'
+                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                             }`}
                                     >
                                         Editor
@@ -179,8 +213,8 @@ export default function LoginPage() {
                                         type="button"
                                         onClick={() => setRole(ROLES.MANAGER)}
                                         className={`flex items-center justify-center py-2.5 px-4 rounded-xl border text-sm font-medium transition-all ${role === ROLES.MANAGER
-                                                ? 'bg-purple-50 border-purple-200 text-purple-700'
-                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                            ? 'bg-purple-50 border-purple-200 text-purple-700'
+                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                             }`}
                                     >
                                         Manager
@@ -241,8 +275,8 @@ export default function LoginPage() {
                         }}
                     >
                         {loading
-                            ? (isSignUp ? 'Creating account...' : 'Signing in...')
-                            : (isSignUp ? 'Create Account' : 'Sign In')
+                            ? (isForgotPassword ? 'Sending...' : (isSignUp ? 'Creating account...' : 'Signing in...'))
+                            : (isForgotPassword ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Sign In'))
                         }
                     </PrimaryButton>
                 </form>
@@ -250,13 +284,27 @@ export default function LoginPage() {
                 {/* Toggle Mode */}
                 <div className="mt-8 text-center pt-6 border-t border-slate-100">
                     <p className="text-sm text-slate-500 mb-0">
-                        {isSignUp ? "Already have an account?" : "Don't have an account?"}
+                        {isForgotPassword
+                            ? "Remember your password?"
+                            : (isSignUp ? "Already have an account?" : "Don't have an account?")
+                        }
                     </p>
                     <button
-                        onClick={() => setIsSignUp(!isSignUp)}
+                        onClick={() => {
+                            if (isForgotPassword) {
+                                setIsForgotPassword(false)
+                            } else {
+                                setIsSignUp(!isSignUp)
+                            }
+                            setError('')
+                            setSuccess('')
+                        }}
                         className="text-sm font-semibold text-pink-600 hover:text-pink-700 hover:underline mt-1 focus:outline-none"
                     >
-                        {isSignUp ? "Sign in instead" : "Create an account"}
+                        {isForgotPassword
+                            ? "Back to Sign in"
+                            : (isSignUp ? "Sign in instead" : "Create an account")
+                        }
                     </button>
                 </div>
             </div>
