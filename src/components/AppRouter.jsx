@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Layout from './layout';
-import Dashboard from '../pages/DashboardPage.jsx';
-import Glossary from '../pages/GlossaryLibrary';
-import PromptLibrary from '../pages/PromptLibrary';
-import Settings from '../pages/Settings';
-import AccountSettings from '../pages/AccountSettings';
-import ProjectView from '../pages/ProjectDetails';
-import ImageTranslation from '../pages/ImageTranslation';
-import Approvals from '../pages/Approvals';
-import QuickCheck from '../pages/QuickCheck';
-import Submissions from '../pages/Submissions';
-import UsersPage from '../pages/UsersPage';
 import { useProjects } from '../context/ProjectContext';
+import { Loader2 } from 'lucide-react';
+
+// Lazy load pages
+const Dashboard = React.lazy(() => import('../pages/DashboardPage.jsx'));
+const Glossary = React.lazy(() => import('../pages/GlossaryLibrary'));
+const PromptLibrary = React.lazy(() => import('../pages/PromptLibrary'));
+const Settings = React.lazy(() => import('../pages/Settings'));
+const AccountSettings = React.lazy(() => import('../pages/AccountSettings'));
+const ProjectView = React.lazy(() => import('../pages/ProjectDetails'));
+const ImageTranslation = React.lazy(() => import('../pages/ImageTranslation'));
+const Approvals = React.lazy(() => import('../pages/Approvals'));
+const QuickCheck = React.lazy(() => import('../pages/QuickCheck'));
+const Submissions = React.lazy(() => import('../pages/Submissions'));
+const UsersPage = React.lazy(() => import('../pages/UsersPage'));
 
 // Simple client-side routing based on URL hash
 export function useRoute() {
@@ -99,7 +102,14 @@ export function AppRouter() {
 
     return (
         <Layout breadcrumbs={breadcrumbs} noPadding={noPadding}>
-            <PageComponent projectId={projectId} />
+            <Suspense fallback={
+                <div className="flex flex-col items-center justify-center min-h-[50vh] text-muted-foreground">
+                    <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
+                    <p>Loading application...</p>
+                </div>
+            }>
+                <PageComponent projectId={projectId} />
+            </Suspense>
         </Layout>
     );
 }

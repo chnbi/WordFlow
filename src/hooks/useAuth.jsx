@@ -42,8 +42,16 @@ export function AuthProvider({ children }) {
     }, []);
 
     useEffect(() => {
+        let unsubscribeSnapshot = null;
+
         // Listen for auth changes
         const unsubscribeAuth = onAuthStateChanged(auth, async (authUser) => {
+            // Cleanup previous snapshot listener if it exists
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
+            }
+
             if (authUser) {
                 // Initial set from Auth
                 setUser({
@@ -56,7 +64,7 @@ export function AuthProvider({ children }) {
                 // Set up real-time listener for Firestore profile
                 // This ensures updates to Name/Avatar/Role/Languages are reflected immediately
                 const userRef = doc(db, 'users', authUser.uid);
-                const unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+                unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         setUser(prev => ({
@@ -70,8 +78,6 @@ export function AuthProvider({ children }) {
                     }
                 });
 
-                // Cleanup snapshot listener on auth change/unmount
-                return () => unsubscribeSnapshot();
             } else {
                 setUser(null);
                 setUserRole(ROLES.EDITOR);
@@ -80,7 +86,12 @@ export function AuthProvider({ children }) {
             loading && setLoading(false);
         });
 
-        return () => unsubscribeAuth();
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+            }
+        };
     }, []);
 
     const signIn = async (email, password) => {

@@ -1,16 +1,21 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
 
 export default defineConfig({
-    plugins: [react()],
+    plugins: [
+        react(),
+        nodePolyfills({
+            // Whether to polyfill `node:` protocol imports.
+            protocolImports: true,
+        }),
+    ],
     // Environment variable prefix
     envPrefix: ['VITE_'],
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './src'),
-            'stream': 'stream-browserify',
-            'util': 'util',
         },
     },
     // Strip all console.* and debugger statements in production builds
@@ -21,7 +26,7 @@ export default defineConfig({
         include: ['pdfjs-dist'],
     },
     build: {
-        chunkSizeWarningLimit: 1000, // Increase limit to suppress warning (we are splitting anyway)
+        chunkSizeWarningLimit: 1000,
         rollupOptions: {
             output: {
                 manualChunks: {
