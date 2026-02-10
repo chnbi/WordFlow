@@ -1,6 +1,6 @@
 // Submissions - Editor's view of rows sent for review
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/App'
+import { useAuth } from '@/context/DevAuthContext'
 import { Clock, CheckCircle2, XCircle, FileText, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageContainer, Card } from '@/components/ui/shared'
@@ -111,8 +111,8 @@ export default function Submissions() {
     return (
         <PageContainer>
             {/* Header */}
-            <PageHeader description="Track rows you've sent for review">
-                My Submissions
+            <PageHeader description="Track rows sent for review">
+                Submissions
             </PageHeader>
 
             {/* Stats */}

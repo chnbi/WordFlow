@@ -16,7 +16,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { useAuth } from "@/App"
+import { useAuth } from "@/context/DevAuthContext"
 import { ROLES, getRoleLabel, getRoleColor } from "@/lib/permissions"
 import { getUsers, updateUserRole, updateUserLanguages } from "@/api/firebase"
 import { LANGUAGES, getLanguagesArray } from "@/lib/constants"
@@ -175,7 +175,7 @@ export default function UserManagementDialog({ open, onOpenChange }) {
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
-                                        )}
+
                                         </div>
                                     </div>
                                 )

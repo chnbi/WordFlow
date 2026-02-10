@@ -6,15 +6,12 @@ import * as dbService from '@/api/firebase'
 import { logAction, AUDIT_ACTIONS } from '@/api/firebase'
 import { toast } from "sonner"
 
+import { useAuth } from '@/context/DevAuthContext'
+
 // Safe auth hook - returns null user if auth context not ready
 function useSafeAuth() {
-    try {
-        const { useAuth } = require('@/App')
-        const auth = useAuth()
-        return auth || { user: null }
-    } catch {
-        return { user: null }
-    }
+    const auth = useAuth()
+    return auth || { user: null }
 }
 
 // Icon mapping for prompt templates

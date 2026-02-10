@@ -9,7 +9,7 @@ import { PromptProvider } from './context/PromptContext';
 import { AuthProvider } from './hooks/useAuth';
 import {
     DevAuthContext,
-    useAuth as shouldUseAuth,
+    useAuth,
     DEV_BYPASS_AUTH,
     DEFAULT_DEV_USER
 } from './context/DevAuthContext';
@@ -23,8 +23,7 @@ import LoginPage from './pages/LoginPage';
 // Permissions
 import { ROLES, getRoleLabel, getRoleColor, ACTIONS } from './lib/permissions';
 
-// Re-export for compatibility
-export const useAuth = shouldUseAuth;
+// Re-export for compatibility (Permissions only)
 export { ROLES, ACTIONS, getRoleLabel, getRoleColor };
 
 function App() {

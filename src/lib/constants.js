@@ -135,6 +135,20 @@ export const DESIGN_TOKENS = {
 // COLORS - Single Source of Truth (Figma Palette)
 // ============================================
 
+export const LAYOUT = {
+    PADDING: 'p-7', // 28px
+    GAP: 'gap-7',   // 28px
+    SIDEBAR: {
+        width: 'w-64',
+        padding: 'py-7 px-4',
+        gap: 'gap-7',
+    },
+    HEADER: {
+        height: 'h-14',
+        paddingX: 'px-7',
+    }
+}
+
 export const COLORS = {
     // === CORE ===
     fuchsia: '#FF0084',

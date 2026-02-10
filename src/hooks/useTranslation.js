@@ -42,7 +42,7 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
 
             // Apply user-specific API key before translation
             try {
-                const { useAuth } = await import('@/App')
+                const { useAuth } = await import('@/context/DevAuthContext')
                 // We can't use hooks here, but we can try to get user from context via a different approach
                 // For now, we'll rely on the Settings page to have saved keys, which AIService can retrieve
             } catch { }

@@ -8,7 +8,7 @@ import {
   LogOut,
   Sparkles,
 } from "lucide-react"
-import { useAuth } from "@/App"
+import { useAuth } from "@/context/DevAuthContext"
 import { updateUserRole, ROLES } from "@/api/firebase/roles"
 
 import {

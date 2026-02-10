@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 import * as dbService from '@/api/firebase'
 import { logAction, AUDIT_ACTIONS } from '@/api/firebase'
 import { toast } from 'sonner'
-import { useAuth } from '@/App'
+import { useAuth } from '@/context/DevAuthContext'
 import { LANGUAGES } from '@/lib/constants'
 
 /**
@@ -310,9 +310,21 @@ export function useProjectData() {
 
         if (dataSource === 'firestore') {
             try {
-                await dbService.addProjectRows(projectId, rowsWithIds)
+                const savedRows = await dbService.addProjectRows(projectId, rowsWithIds)
+
+                // Replace temp rows with real rows from Firestore
+                setProjectRows(prev => {
+                    const current = prev[projectId] || []
+                    const tempIds = new Set(rowsWithIds.map(r => r.id))
+                    const kept = current.filter(r => !tempIds.has(r.id))
+                    return {
+                        ...prev,
+                        [projectId]: [...kept, ...savedRows]
+                    }
+                })
             } catch (error) {
                 console.error('Error adding rows to Firestore:', error)
+                // Optionally revert optimistic update here
             }
         }
 
@@ -340,7 +352,28 @@ export function useProjectData() {
 
         if (dataSource === 'firestore') {
             try {
-                await dbService.addPageRows(projectId, pageId, rowsWithIds)
+                const savedRows = await dbService.addPageRows(projectId, pageId, rowsWithIds)
+
+                // Replace temp rows with real rows from Firestore
+                setProjectPages(prev => {
+                    const projData = prev[projectId]
+                    if (!projData) return prev
+
+                    const currentRows = projData.pageRows?.[pageId] || []
+                    const tempIds = new Set(rowsWithIds.map(r => r.id))
+                    const kept = currentRows.filter(r => !tempIds.has(r.id))
+
+                    return {
+                        ...prev,
+                        [projectId]: {
+                            ...projData,
+                            pageRows: {
+                                ...(projData.pageRows || {}),
+                                [pageId]: [...kept, ...savedRows]
+                            }
+                        }
+                    }
+                })
 
                 // Audit log
                 if (user) {

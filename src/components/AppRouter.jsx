@@ -4,6 +4,7 @@ import Dashboard from '../pages/DashboardPage.jsx';
 import Glossary from '../pages/GlossaryLibrary';
 import PromptLibrary from '../pages/PromptLibrary';
 import Settings from '../pages/Settings';
+import AccountSettings from '../pages/AccountSettings';
 import ProjectView from '../pages/ProjectDetails';
 import ImageTranslation from '../pages/ImageTranslation';
 import Approvals from '../pages/Approvals';
@@ -54,7 +55,9 @@ export function AppRouter() {
             case 'quick-check':
                 return { component: QuickCheck, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Quick Check' }] };
             case 'settings':
-                return { component: Settings, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings' }] };
+                return { component: Settings, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings' }], noPadding: true };
+            case 'account-settings':
+                return { component: AccountSettings, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Account Settings' }], noPadding: true };
             case 'users':
                 return { component: UsersPage, breadcrumbs: [{ label: 'Home', href: '#' }, { label: 'Settings', href: '#settings' }, { label: 'Users' }] };
             default:
@@ -92,10 +95,10 @@ export function AppRouter() {
         }
     };
 
-    const { component: PageComponent, breadcrumbs, projectId } = getPageConfig();
+    const { component: PageComponent, breadcrumbs, projectId, noPadding } = getPageConfig();
 
     return (
-        <Layout breadcrumbs={breadcrumbs}>
+        <Layout breadcrumbs={breadcrumbs} noPadding={noPadding}>
             <PageComponent projectId={projectId} />
         </Layout>
     );

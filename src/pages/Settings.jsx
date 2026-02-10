@@ -1,7 +1,7 @@
 // Settings - User and admin settings with consistent layout
 import { User, Shield, Bell, Palette, Key, ChevronRight, Activity, Eye, EyeOff, Save, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useAuth } from "@/App"
+import { useAuth } from "@/context/DevAuthContext"
 import { useState, useEffect } from "react"
 import ManageCategoriesDialog from "@/components/dialogs/ManageCategoriesDialog"
 import UserManagementDialog from "@/components/dialogs/UserManagementDialog"
@@ -14,7 +14,6 @@ import { ROLES } from "@/hooks/useAuth"
 
 import AuditLogsSection from "@/components/AuditLogsSection"
 import { PageContainer } from "@/components/ui/shared"
-
 import { PageHeader } from "@/components/ui/common"
 
 const adminSections = [
@@ -56,11 +55,6 @@ export default function Settings() {
         try {
             await updateUserLanguages(user.id, managerLangs)
             toast.success('Manager languages updated')
-            // Optimistically update or wait for auth listener? 
-            // Auth listener should pick it up if it listens to doc changes, 
-            // but useAuth currently fetches on mount/auth-change. 
-            // Might need to reload page or trigger re-fetch.
-            // For now, simple success message.
             setTimeout(() => window.location.reload(), 1000)
         } catch (error) {
             console.error(error)
@@ -103,17 +97,13 @@ export default function Settings() {
                     if (element) {
                         setTimeout(() => {
                             element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                            // Optional: Highlight effect?
                         }, 100)
                     }
                 }
             }
         }
 
-        // Run on mount
         handleScrollToSection()
-
-        // Listen for hash changes (if user clicks sidebar links while on settings page)
         window.addEventListener('hashchange', handleScrollToSection)
         return () => window.removeEventListener('hashchange', handleScrollToSection)
     }, [])
@@ -135,10 +125,22 @@ export default function Settings() {
         }
     }
 
+    // Load current AI provider
+    const [currentProvider, setCurrentProvider] = useState('gemini')
+    useEffect(() => {
+        const loadProvider = async () => {
+            try {
+                const { AIService } = await import('@/api/ai')
+                setCurrentProvider(AIService.getCurrentProvider())
+            } catch (e) {
+                console.error("Failed to load AI provider", e)
+            }
+        }
+        loadProvider()
+    }, [])
+
     return (
         <PageContainer>
-            {/* Header */}
-            {/* Header */}
             <PageHeader
                 description="Manage your account and preferences"
             >
@@ -148,24 +150,6 @@ export default function Settings() {
             <div id="security" className="space-y-3">
                 <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Security</h2>
                 <div className="rounded-2xl bg-card border border-border divide-y divide-border">
-                    <button
-                        onClick={() => setIsPasswordOpen(true)}
-                        className="w-full flex items-center gap-4 p-5 hover:bg-muted/50 transition-colors text-left"
-                    >
-                        <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
-                            <Key className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground">
-                                Change Password
-                            </p>
-                            <p className="text-sm text-muted-foreground mt-0.5 truncate">
-                                Update your account password
-                            </p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
-                    </button>
-                    {/* Glossary Categories - Now available for everyone */}
                     <button
                         onClick={() => setIsCategoryOpen(true)}
                         className="w-full flex items-center gap-4 p-5 hover:bg-muted/50 transition-colors text-left"
@@ -186,7 +170,6 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* AI Provider Settings - Collapsed by default via details/summary for simplicity */}
             <div id="api-configuration" className="space-y-3 pt-6">
                 <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">API Configuration</h2>
                 <div className="rounded-2xl bg-card border border-border">
@@ -209,12 +192,7 @@ export default function Settings() {
                             <div className="flex items-center gap-4 mb-4 mt-6">
                                 <select
                                     className="flex-1 h-10 px-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                    defaultValue={(() => {
-                                        try {
-                                            const { AIService } = require('@/api/ai');
-                                            return AIService.getCurrentProvider();
-                                        } catch { return 'gemini'; }
-                                    })()}
+                                    defaultValue={currentProvider}
                                     onChange={async (e) => {
                                         const { AIService } = await import('@/api/ai');
                                         AIService.setProvider(e.target.value);
@@ -230,20 +208,11 @@ export default function Settings() {
                                         const toastId = toast.loading("Testing connection...")
                                         try {
                                             const { getAI, AIService } = await import('@/api/ai')
-
-                                            // Apply user API key if available
-                                            if (user?.id) {
-                                                await AIService.applyUserApiKey(user.id)
-                                            }
-
+                                            if (user?.id) await AIService.applyUserApiKey(user.id)
                                             const ai = getAI()
                                             const res = await ai.testConnection()
-
-                                            if (res.success) {
-                                                toast.success(`Connected! Response: ${res.message}`, { id: toastId })
-                                            } else {
-                                                throw new Error(res.message || "Connection failed")
-                                            }
+                                            if (res.success) toast.success(`Connected! Response: ${res.message}`, { id: toastId })
+                                            else throw new Error(res.message || "Connection failed")
                                         } catch (err) {
                                             console.error(err)
                                             toast.error("Connection Failed. Check API Key.", { id: toastId })
@@ -254,14 +223,11 @@ export default function Settings() {
                                 </Button>
                             </div>
 
-                            {/* API Key Inputs */}
                             <div className="space-y-4 pt-4 border-t border-border">
                                 <h4 className="text-sm font-medium text-foreground">Your API Keys</h4>
                                 <p className="text-xs text-muted-foreground">
                                     Enter your own API keys to use instead of the default. Leave blank to use environment defaults.
                                 </p>
-
-                                {/* Gemini Key */}
                                 <div className="space-y-2">
                                     <label className="text-xs font-medium text-muted-foreground">Google Gemini API Key</label>
                                     <div className="flex gap-2">
@@ -283,8 +249,6 @@ export default function Settings() {
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* ILMUchat Key */}
                                 <div className="space-y-2">
                                     <label className="text-xs font-medium text-muted-foreground">ILMUchat API Key</label>
                                     <div className="flex gap-2">
@@ -306,13 +270,7 @@ export default function Settings() {
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Save Button */}
-                                <Button
-                                    onClick={handleSaveApiKeys}
-                                    disabled={savingKeys}
-                                    className="w-full"
-                                >
+                                <Button onClick={handleSaveApiKeys} disabled={savingKeys} className="w-full">
                                     <Save className="w-4 h-4 mr-2" />
                                     {savingKeys ? 'Saving...' : 'Save API Keys'}
                                 </Button>
@@ -322,8 +280,7 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* Manager Profile Settings */}
-            {canDo('manage_projects') && ( // Managers and Admins
+            {canDo('manage_projects') && (
                 <div id="manager-profile" className="space-y-3 pt-6">
                     <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Manager Profile</h2>
                     <div className="rounded-2xl bg-card border border-border p-6">
@@ -336,7 +293,6 @@ export default function Settings() {
                                 <p className="text-sm text-muted-foreground">Select the languages you are responsible for approving.</p>
                             </div>
                         </div>
-
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
                             {Object.values(LANGUAGES).map(lang => {
                                 const isSelected = managerLangs.includes(lang.code)
@@ -344,13 +300,7 @@ export default function Settings() {
                                     <button
                                         key={lang.code}
                                         onClick={() => toggleManagerLang(lang.code)}
-                                        className={`
-                                            flex items-center justify-between px-4 py-3 rounded-xl border text-sm transition-all
-                                            ${isSelected
-                                                ? 'bg-primary/5 border-primary text-primary font-medium'
-                                                : 'bg-background border-border text-muted-foreground hover:bg-muted/50'
-                                            }
-                                        `}
+                                        className={`flex items-center justify-between px-4 py-3 rounded-xl border text-sm transition-all ${isSelected ? 'bg-primary/5 border-primary text-primary font-medium' : 'bg-background border-border text-muted-foreground hover:bg-muted/50'}`}
                                     >
                                         <span>{lang.label}</span>
                                         {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
@@ -358,12 +308,7 @@ export default function Settings() {
                                 )
                             })}
                         </div>
-
-                        <Button
-                            onClick={handleSaveLanguages}
-                            disabled={savingLangs}
-                            className="w-full sm:w-auto"
-                        >
+                        <Button onClick={handleSaveLanguages} disabled={savingLangs} className="w-full sm:w-auto">
                             <Save className="w-4 h-4 mr-2" />
                             {savingLangs ? 'Saving...' : 'Save Preferences'}
                         </Button>
@@ -371,7 +316,6 @@ export default function Settings() {
                 </div>
             )}
 
-            {/* Admin/Manager Settings */}
             {canDo('manage_users') && (
                 <div id="administration" className="space-y-3 pt-6">
                     <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Administration</h2>
@@ -406,23 +350,12 @@ export default function Settings() {
                 </div>
             )}
 
-            {/* Audit Trail - Manager only */}
             {canDo('manage_users') && (
                 <AuditLogsSection />
             )}
 
-
-
-            <ManageCategoriesDialog
-                open={isCategoryOpen}
-                onOpenChange={setIsCategoryOpen}
-            />
-
-            <ChangePasswordDialog
-                open={isPasswordOpen}
-                onOpenChange={setIsPasswordOpen}
-            />
-
+            <ManageCategoriesDialog open={isCategoryOpen} onOpenChange={setIsCategoryOpen} />
+            <ChangePasswordDialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen} />
         </PageContainer>
     )
 }

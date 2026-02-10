@@ -13,7 +13,7 @@ import {
     MoreHorizontal,
     Trash2
 } from "lucide-react"
-import { useAuth } from "@/App"
+import { useAuth } from "@/context/DevAuthContext"
 import { ROLES, getRoleLabel, getRoleColor } from "@/lib/permissions"
 import { getUsers } from "@/api/firebase"
 import { toast } from "sonner"

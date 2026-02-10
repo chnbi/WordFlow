@@ -46,7 +46,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog"
-import { useAuth } from "@/App"
+import { useAuth } from "@/context/DevAuthContext"
 import { WordFlowLogo } from "@/components/ui/WordFlowLogo"
 import { COLORS } from "@/lib/constants"
 
@@ -514,9 +514,7 @@ export function AppSidebar({ ...props }) {
   const pendingApprovals = React.useMemo(() => {
     let count = 0
     // Count project rows pending review
-    const projectsToCount = isManager
-      ? projects
-      : projects.filter(p => p.createdBy === user?.id)
+    const projectsToCount = projects
 
     for (const project of projectsToCount) {
       const pages = getProjectPages(project.id) || []
@@ -547,7 +545,7 @@ export function AppSidebar({ ...props }) {
     // Only show Approvals to Managers
     ...(isManager ? [{ title: "Approvals", url: "#approvals", icon: Edit3, badge: pendingApprovals > 0 ? pendingApprovals : undefined }] : []),
     // Only show My Submissions to Editors
-    ...(!isManager ? [{ title: "My Submissions", url: "#submissions", icon: CheckSquare, badge: pendingApprovals > 0 ? pendingApprovals : undefined }] : []),
+    ...(!isManager ? [{ title: "Submissions", url: "#submissions", icon: CheckSquare, badge: pendingApprovals > 0 ? pendingApprovals : undefined }] : []),
     { title: "Quick Check", url: "#quick-check", icon: Sparkles },
     { title: "Image Translation", url: "#image-translate", icon: Languages },
     { title: "Glossary", url: "#glossary", icon: BookOpen, badge: glossaryNewApprovals > 0 ? glossaryNewApprovals : undefined },
@@ -555,9 +553,9 @@ export function AppSidebar({ ...props }) {
   ]
 
   // Filter projects for recent list based on role (Editor sees only their own)
-  const filteredNavProjects = isManager
-    ? projects
-    : projects.filter(p => p.createdBy === user?.id)
+  // Filter projects for recent list based on role (Editor sees only their own)
+  // UPDATE: Editors should see all projects too
+  const filteredNavProjects = projects
 
   // Dynamic projects list (show up to 5 recent, sorted by lastUpdated)
   const navProjects = [...filteredNavProjects]

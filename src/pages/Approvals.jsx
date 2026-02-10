@@ -8,7 +8,7 @@ import { SearchInput, PageHeader } from "@/components/ui/common"
 import { DataTable } from "@/components/ui/DataTable"
 import Pagination from "@/components/Pagination"
 import { toast } from "sonner"
-import { useAuth } from "@/App"
+import { useAuth } from "@/context/DevAuthContext"
 import { LANGUAGES, getLanguageLabel } from "@/lib/constants"
 
 import { ReassignManagerDialog } from "@/components/dialogs/ReassignManagerDialog"
@@ -652,29 +652,40 @@ export default function Approvals() {
             <PageHeader
                 description="Review and manage translations pending approval."
                 actions={
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                    <div className="flex gap-2">
                         <button
                             onClick={() => { setActiveTab("projects"); setSelectedIds([]); setLocalApprovals({}) }}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === "projects"
-                                ? 'bg-white text-slate-900 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full transition-all border ${activeTab === "projects"
+                                ? 'bg-pink-50 text-pink-700 border-pink-200 shadow-sm'
+                                : 'bg-transparent text-slate-500 border-transparent hover:bg-slate-100 hover:text-slate-700'
                                 }`}
                         >
                             Projects
                             {projectReviewRows.length > 0 && (
-                                <span className="ml-2 bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === "projects"
+                                    ? 'bg-pink-200 text-pink-800'
+                                    : 'bg-slate-200 text-slate-600'
+                                    }`}>
                                     {projectReviewRows.length}
                                 </span>
                             )}
                         </button>
                         <button
                             onClick={() => { setActiveTab("glossary"); setSelectedIds([]); setLocalApprovals({}) }}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === "glossary"
-                                ? 'bg-white text-slate-900 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full transition-all border ${activeTab === "glossary"
+                                ? 'bg-pink-50 text-pink-700 border-pink-200 shadow-sm'
+                                : 'bg-transparent text-slate-500 border-transparent hover:bg-slate-100 hover:text-slate-700'
                                 }`}
                         >
                             Glossary
+                            {glossaryReviewRows.length > 0 && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === "glossary"
+                                    ? 'bg-pink-200 text-pink-800'
+                                    : 'bg-slate-200 text-slate-600'
+                                    }`}>
+                                    {glossaryReviewRows.length}
+                                </span>
+                            )}
                         </button>
                     </div>
                 }
@@ -707,31 +718,33 @@ export default function Approvals() {
             </div>
 
             {/* Table */}
-            {filteredRows.length === 0 ? (
-                <div className="text-center py-12 px-6 border border-dashed border-slate-200 rounded-lg bg-slate-50 text-slate-400 text-sm">
-                    No requests found.
-                </div>
-            ) : (
-                <>
-                    <DataTable
-                        columns={activeTab === "projects" ? projectColumns : glossaryColumns}
-                        data={paginatedRows}
-                        selectedIds={selectedIds}
-                        onToggleSelect={toggleSelect}
-                        onToggleSelectAll={toggleSelectAll}
-                    />
-
-                    {totalItems > 0 && (
-                        <Pagination
-                            currentPage={currentPage}
-                            totalItems={totalItems}
-                            itemsPerPage={itemsPerPage}
-                            onPageChange={setCurrentPage}
-                            onItemsPerPageChange={setItemsPerPage}
+            {
+                filteredRows.length === 0 ? (
+                    <div className="text-center py-12 px-6 border border-dashed border-slate-200 rounded-lg bg-slate-50 text-slate-400 text-sm">
+                        No requests found.
+                    </div>
+                ) : (
+                    <>
+                        <DataTable
+                            columns={activeTab === "projects" ? projectColumns : glossaryColumns}
+                            data={paginatedRows}
+                            selectedIds={selectedIds}
+                            onToggleSelect={toggleSelect}
+                            onToggleSelectAll={toggleSelectAll}
                         />
-                    )}
-                </>
-            )}
+
+                        {totalItems > 0 && (
+                            <Pagination
+                                currentPage={currentPage}
+                                totalItems={totalItems}
+                                itemsPerPage={itemsPerPage}
+                                onPageChange={setCurrentPage}
+                                onItemsPerPageChange={setItemsPerPage}
+                            />
+                        )}
+                    </>
+                )
+            }
 
             <ReassignManagerDialog
                 open={reassignOpen}
@@ -774,6 +787,6 @@ export default function Approvals() {
                 targetLanguage={reassignData?.lang}
                 languageLabel={getLanguageLabel(reassignData?.lang)}
             />
-        </PageContainer>
+        </PageContainer >
     )
 }
