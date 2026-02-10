@@ -61,7 +61,6 @@ export function useProjectData() {
                                     allProjectRows = unpagedRows // Content is same, just location changed
                                     // Migrated rows to Page 1
                                 } catch (migrationErr) {
-                                    console.error(`[Migration] Failed to migrate project ${project.id}:`, migrationErr)
                                 }
                             } else {
                                 // Load page rows normally
@@ -79,27 +78,6 @@ export function useProjectData() {
 
                             const progress = totalRows > 0 ? Math.round((approvedRows / totalRows) * 100) : 0
 
-                            // Determine dynamic status
-                            let calculatedStatus = project.status || 'draft'
-
-                            if (totalRows > 0) {
-                                if (reviewRows > 0) {
-                                    calculatedStatus = 'review'
-                                } else if (approvedRows === totalRows) {
-                                    calculatedStatus = 'approved'
-                                } else if (approvedRows > 0) {
-                                    // Partially approved but no active reviews -> could be draft or just in progress
-                                    // Let's default to 'review' if it's not fully approved but has progress
-                                    // Or keep existing status. User asked: "if it is sent for review, even partially, should it be changed to in review?"
-                                    // So if reviewRows > 0 -> Review.
-                                    // User also said "only show approved when fully done".
-                                    calculatedStatus = 'draft' // Default back to draft if partially done but nothing explicitly in review?
-                                    // Actually, if it's partially done, it's usually "In Progress" or "Review" in many systems.
-                                    // But based on "only show approved when fully done", anything else is not approved.
-                                    // If reviewRows > 0, it's Review.
-                                }
-                            }
-
                             // Attach calculated progress and status to project
                             // detailed status logic override
                             const projectWithStats = {
@@ -115,7 +93,6 @@ export function useProjectData() {
                                 setSelectedPageId(prev => ({ ...prev, [project.id]: pages[0].id }))
                             }
                         } catch (err) {
-                            console.error(`Failed to load details for project ${project.id}`, err)
                         }
                     }
 
@@ -126,7 +103,6 @@ export function useProjectData() {
                     // Projects loaded successfully
                 }
             } catch (error) {
-                console.error('[Firebase] Error loading data:', error)
                 toast.error("Failed to load projects from database")
                 setDataSource('error')
                 setProjects([])
@@ -251,11 +227,11 @@ export function useProjectData() {
             if (pageIdForRow) {
                 // Row is in a page - use page-specific update
                 // Update page row
-                dbService.updatePageRow(projectId, pageIdForRow, rowId, updates).catch(console.error)
+                dbService.updatePageRow(projectId, pageIdForRow, rowId, updates).catch(() => { })
             } else {
                 // Row is in legacy flat structure
                 // Update legacy row
-                dbService.updateProjectRow(projectId, rowId, updates).catch(console.error)
+                dbService.updateProjectRow(projectId, rowId, updates).catch(() => { })
             }
         }
     }, [dataSource, projectPages])
@@ -291,7 +267,7 @@ export function useProjectData() {
 
         // Sync to Firestore
         if (dataSource === 'firestore') {
-            dbService.updateProjectRows(projectId, rowUpdates).catch(console.error)
+            dbService.updateProjectRows(projectId, rowUpdates).catch(() => { })
         }
     }, [dataSource])
 
@@ -323,7 +299,6 @@ export function useProjectData() {
                     }
                 })
             } catch (error) {
-                console.error('Error adding rows to Firestore:', error)
                 // Optionally revert optimistic update here
             }
         }
@@ -385,7 +360,6 @@ export function useProjectData() {
 
                 toast.success(`Added ${rowsWithIds.length} row(s)`)
             } catch (error) {
-                console.error('Error adding rows to page:', error)
                 toast.error('Failed to add rows')
             }
         }
@@ -433,7 +407,6 @@ export function useProjectData() {
 
                 toast.success(`Deleted ${rowIds.length} row(s)`)
             } catch (error) {
-                console.error('Error deleting rows:', error)
                 toast.error('Failed to delete rows')
             }
         }
@@ -546,7 +519,6 @@ export function useProjectData() {
                 return { ...newProject, firstPageId }
 
             } catch (error) {
-                console.error('Error creating project in Firestore:', error)
                 throw error
             }
         } else {
@@ -569,7 +541,7 @@ export function useProjectData() {
         ))
 
         if (dataSource === 'firestore') {
-            dbService.updateProject(id, updates).catch(console.error)
+            dbService.updateProject(id, updates).catch(() => { })
         }
     }, [dataSource])
 
@@ -582,7 +554,7 @@ export function useProjectData() {
         })
 
         if (dataSource === 'firestore') {
-            dbService.deleteProject(id).catch(console.error)
+            dbService.deleteProject(id).catch(() => { })
         }
     }, [dataSource])
 

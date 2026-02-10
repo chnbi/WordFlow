@@ -44,6 +44,7 @@
         "sonner": "^2.0.7",
         "stream-browserify": "^3.0.0",
         "tailwind-merge": "^2.5.2",
+        "util": "^0.12.5",
         "xlsx": "^0.18.5",
         "xml-js": "^1.6.11"
     },

@@ -92,7 +92,6 @@ export default function AccountSettings() {
             setNewPassword('')
             setConfirmPassword('')
         } catch (error) {
-            console.error('Password change error:', error)
             if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 toast.error('Current password is incorrect')
             } else if (error.code === 'auth/requires-recent-login') {

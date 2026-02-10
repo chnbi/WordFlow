@@ -56,7 +56,6 @@ export function PromptProvider({ children }) {
                 setDataSource('firebase')
                 // Templates loaded
             } catch (error) {
-                console.error('[Firebase] Error loading templates:', error)
                 toast.error("Failed to load templates")
                 setDataSource('error')
             } finally {
@@ -90,7 +89,6 @@ export function PromptProvider({ children }) {
 
             return enhanced
         } catch (error) {
-            console.error('Error creating template:', error)
             toast.error("Failed to create template")
             throw error
         }
@@ -113,7 +111,6 @@ export function PromptProvider({ children }) {
                 }
             })
         } catch (error) {
-            console.error("Failed to update template", error)
             toast.error("Failed to update template")
         }
     }, [templates, user])
@@ -124,7 +121,6 @@ export function PromptProvider({ children }) {
             await dbService.deleteTemplate(id)
             setTemplates(prev => prev.filter(t => t.id !== id))
         } catch (error) {
-            console.error("Failed to delete template", error)
             toast.error("Failed to delete template")
         }
     }, [])

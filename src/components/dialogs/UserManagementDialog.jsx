@@ -44,7 +44,6 @@ export default function UserManagementDialog({ open, onOpenChange }) {
                 avatar: u.avatar
             })))
         } catch (error) {
-            console.error('Error fetching users:', error)
             toast.error("Failed to load users")
         } finally {
             setIsFetching(false)
@@ -70,7 +69,6 @@ export default function UserManagementDialog({ open, onOpenChange }) {
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
             toast.success("User role updated")
         } catch (error) {
-            console.error('Error updating role:', error)
             toast.error("Failed to update user role")
         } finally {
             setIsLoading(false)
@@ -227,7 +225,6 @@ function LanguageAssignmentDialog({ user, open, onOpenChange, onUpdate }) {
             onUpdate(user.id, selectedLanguages)
             toast.success("Languages updated")
         } catch (error) {
-            console.error(error)
             toast.error("Failed to update languages")
         } finally {
             setIsSaving(false)

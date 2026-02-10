@@ -21,7 +21,7 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
 
     // Check if Gemini API is configured
     const isApiConfigured = useCallback(() => {
-        return !!(import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY)
+        return false // Gemini disabled for production
     }, [])
 
     // Perform translation using Gemini API
@@ -30,7 +30,6 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
         const BASE_BACKOFF_MS = 5000
 
         if (!isApiConfigured()) {
-            console.error('[Translation] No API key configured')
             toast.error("Gemini API Key is missing")
             throw new Error("API_KEY_MISSING")
         }
@@ -39,13 +38,6 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
             const glossaryTerms = fetchGlossaryFn ? await fetchGlossaryFn() : []
             // Use new AI Service
             const { getAI, AIService } = await import('@/api/ai')
-
-            // Apply user-specific API key before translation
-            try {
-                const { useAuth } = await import('@/context/DevAuthContext')
-                // We can't use hooks here, but we can try to get user from context via a different approach
-                // For now, we'll rely on the Settings page to have saved keys, which AIService can retrieve
-            } catch { }
 
             // Get the AI instance (will use cached instance with applied API key if set)
             const ai = getAI()
@@ -83,11 +75,10 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
             }))
 
         } catch (error) {
-            console.error('[Translation] API error:', error)
+
 
             if (error.message === 'RATE_LIMIT' && retryCount < MAX_RETRIES) {
                 const backoffMs = BASE_BACKOFF_MS * Math.pow(2, retryCount)
-                console.log(`[Translation] Rate limited, retrying in ${backoffMs}ms...`)
                 await new Promise(resolve => setTimeout(resolve, backoffMs))
                 return performTranslation(rows, template, retryCount + 1)
             }
@@ -176,7 +167,6 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
                 updateRowsFn(batch.projectId, resultUpdates)
 
             } catch (error) {
-                console.error('Translation error:', error)
                 const errorUpdates = batch.rows.map(r => ({ id: r.id, changes: { status: 'error' } }))
                 updateRowsFn(batch.projectId, errorUpdates)
             }

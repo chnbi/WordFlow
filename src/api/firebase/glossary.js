@@ -120,11 +120,6 @@ export async function deleteGlossaryTerms(ids) {
     }
 }
 
-// Placeholder for seeding
-export async function seedDefaultGlossary() {
-    // Use Admin UI to seed data
-}
-
 // ==========================================
 // GLOSSARY CATEGORIES
 // ==========================================

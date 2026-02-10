@@ -47,7 +47,6 @@ export const AUDIT_ACTIONS = {
  */
 export async function logAction(user, action, entityType, entityId, options = {}) {
     if (!user?.id && !user?.uid) {
-        console.warn('[Audit] No user provided, skipping log');
         return null;
     }
 
@@ -64,10 +63,8 @@ export async function logAction(user, action, entityType, entityId, options = {}
             created: serverTimestamp(), // PB uses 'created', we use 'created' or 'createdAt'
             createdAt: serverTimestamp()
         });
-        console.log(`[Firebase] Logged: ${action} on ${entityType}/${entityId}`);
         return docRef.id;
     } catch (error) {
-        console.error('[Audit] Failed to log action:', error);
         return null;
     }
 }
@@ -92,7 +89,6 @@ export async function getEntityHistory(entityType, entityId, maxResults = 50) {
             timestamp: doc.data().createdAt?.toDate() || new Date()
         }));
     } catch (error) {
-        console.error('[Audit] Failed to get entity history:', error);
         return [];
     }
 }
@@ -114,7 +110,6 @@ export async function getProjectActivity(projectId, maxResults = 20) {
             timestamp: doc.data().createdAt?.toDate() || new Date()
         }));
     } catch (error) {
-        console.error('[Audit] Failed to get project activity:', error);
         return [];
     }
 }
@@ -139,7 +134,6 @@ export async function getAllAuditLogs(filters = {}, maxResults = 100) {
             timestamp: doc.data().createdAt?.toDate() || new Date()
         }));
     } catch (error) {
-        console.error('[Audit] Failed to get audit logs:', error);
         return [];
     }
 }

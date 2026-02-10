@@ -63,7 +63,6 @@ export default function UsersPage() {
             }))
             setUsers(transformed)
         } catch (error) {
-            console.error(error)
             toast.error("Failed to load users")
         } finally {
             setIsLoading(false)
@@ -289,7 +288,6 @@ export default function UsersPage() {
                         toast.success("User deleted successfully")
                         fetchUsers()
                     } catch (error) {
-                        console.error(error)
                         toast.error("Failed to delete user")
                     } finally {
                         setIsDeleting(false)

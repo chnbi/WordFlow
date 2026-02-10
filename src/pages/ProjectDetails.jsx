@@ -306,7 +306,6 @@ export default function ProjectView({ projectId }) {
             })
             toast.success(`Exported to ${project.name}_${targetLang}.docx`)
         } catch (error) {
-            console.error('DOCX export error:', error)
             toast.error('Failed to export Word document')
         }
     }
@@ -328,7 +327,6 @@ export default function ProjectView({ projectId }) {
             })
             toast.success(`Exported to ${project.name}_${targetLang}.pptx`)
         } catch (error) {
-            console.error('PPTX export error:', error)
             toast.error('Failed to export PowerPoint')
         }
     }
@@ -357,7 +355,6 @@ export default function ProjectView({ projectId }) {
                 }
             }
         } catch (error) {
-            console.error('Error importing file:', error)
         } finally {
             setIsImporting(false)
             fileInputRef.current.value = ''
@@ -460,7 +457,6 @@ export default function ProjectView({ projectId }) {
 
             toast.success(`Deleted ${idsToDelete.length} rows`)
         } catch (error) {
-            console.error('Delete failed:', error)
             toast.error('Failed to delete rows')
         }
         setDeleteConfirm(null)
@@ -530,7 +526,6 @@ export default function ProjectView({ projectId }) {
             setEditingRowId(null)
             setEditingRowData(null)
         } catch (error) {
-            console.error('Update failed:', error)
             toast.error('Failed to update row')
         }
     }
@@ -573,7 +568,6 @@ export default function ProjectView({ projectId }) {
                 const mgrs = allUsers.filter(u => u.role === 'manager')
                 setManagers(mgrs)
             } catch (error) {
-                console.error("Failed to load managers", error)
                 toast.error("Failed to load managers checklist")
             }
         }
@@ -617,7 +611,6 @@ export default function ProjectView({ projectId }) {
             toast.dismiss(loadingToast)
             toast.success(`Sent ${successCount} rows for review with assignments`)
         } catch (error) {
-            console.error(error)
             toast.dismiss(loadingToast)
             toast.error("Failed to send for review")
         }
@@ -634,12 +627,17 @@ export default function ProjectView({ projectId }) {
             if (hasSelection) {
                 // Selected rows - override existing translations
                 rowsToTranslate = rows.filter(row => selectedRowIds.has(row.id))
-                console.log(`[Translate] Translating ${rowsToTranslate.length} selected rows (override mode)`)
                 toast.info(`Translating ${rowsToTranslate.length} selected rows...`)
             } else {
-                // No selection - translate only empty cells
-                rowsToTranslate = rows.filter(row => !row.my?.trim() || !row.zh?.trim())
-                console.log(`[Translate] Translating ${rowsToTranslate.length} rows with empty translations`)
+                // No selection - translate only rows with at least one empty target language
+                rowsToTranslate = rows.filter(row => {
+                    return targetLanguages.some(lang => {
+                        const v2Text = row.translations?.[lang]?.text
+                        const legacyText = row[lang]
+                        const text = v2Text || legacyText || ''
+                        return !text.trim()
+                    })
+                })
                 if (rowsToTranslate.length === 0) {
                     toast.info('All rows already have translations!')
                     setIsTranslating(false)
@@ -668,16 +666,11 @@ export default function ProjectView({ projectId }) {
                     const allSame = rowPromptIds.every(id => id === firstRowPromptId)
                     if (allSame) {
                         effectivePromptId = firstRowPromptId
-                        console.log('[DEBUG] Using per-row promptId:', effectivePromptId)
                     } else {
-                        console.log('[DEBUG] Selected rows have different promptIds, using first:', firstRowPromptId)
                         effectivePromptId = firstRowPromptId
                     }
                 }
             }
-
-            console.log('[DEBUG] Effective promptId:', effectivePromptId)
-            console.log('[DEBUG] All templates:', templates.map(t => ({ id: t.id, name: t.name, isDefault: t.isDefault, status: t.status })))
 
             // Get base default template (MANDATORY - no fallback)
             const baseDefaultTemplate = defaultTemplate || publishedTemplates[0]
@@ -698,7 +691,6 @@ export default function ProjectView({ projectId }) {
                 rowsByPromptId[promptKey].push(row)
             }
 
-            console.log('[DEBUG] Row groups by promptId:', Object.keys(rowsByPromptId).map(k => `${k}: ${rowsByPromptId[k].length} rows`))
 
             // Translate each group with its respective prompt
             let totalSuccessCount = 0
@@ -708,7 +700,6 @@ export default function ProjectView({ projectId }) {
 
                 // Get user-selected template for this group
                 const selectedTemplate = effectivePromptId ? publishedTemplates.find(t => t.id === effectivePromptId) : null
-                console.log(`[DEBUG] Group "${promptKey}": ${groupRows.length} rows, template:`, selectedTemplate?.name || 'Default only')
 
                 // Merge prompts: Default base (ALWAYS) + Custom additions (if selected and different)
                 let mergedPrompt = baseDefaultTemplate.prompt || ''
@@ -726,7 +717,6 @@ export default function ProjectView({ projectId }) {
                     prompt: mergedPrompt
                 }
 
-                console.log(`[Translate] Group "${promptKey}" using template: ${templateToUse.name}`)
 
                 // Call translation API for this group - use project's target languages
                 const ai = getAI();
@@ -749,6 +739,15 @@ export default function ProjectView({ projectId }) {
                 for (const result of results) {
                     if (!result.id) continue; // Skip invalid results
 
+                    // Resolve the actual row ID — if result.id is a temp client-side ID,
+                    // find the matching row in our local state by source text
+                    let resolvedRowId = result.id
+                    const matchedRow = groupRows.find(r => r.id === result.id)
+                    if (!matchedRow && result.id.startsWith('row_')) {
+                        // Temp ID not found in current rows — skip to avoid Firebase error
+                        continue
+                    }
+
                     // Result format: { id, translations: { my: { text, status }, zh: { text, status } } }
                     const updates = {
                         translatedAt: new Date().toISOString(),
@@ -764,7 +763,7 @@ export default function ProjectView({ projectId }) {
                     })
 
                     try {
-                        await updateProjectRow(id, result.id, updates)
+                        await updateProjectRow(id, resolvedRowId, updates)
                         totalSuccessCount++
                     } catch (err) {
                         // Silent fail for individual row update to allow others to proceed
@@ -773,12 +772,10 @@ export default function ProjectView({ projectId }) {
             }
 
             toast.success(`Successfully translated ${totalSuccessCount} rows!`)
-            console.log(`[Translate] Completed: ${totalSuccessCount}/${rowsToTranslate.length} rows`)
 
         } catch (error) {
-            console.error('❌ [Translate] Error:', error)
             if (error.message === 'API_NOT_CONFIGURED') {
-                toast.error('Gemini API key not configured. Add VITE_GEMINI_API_KEY to .env')
+                toast.error('AI Translation is currently unavailable')
             } else if (error.message === 'RATE_LIMIT') {
                 toast.error('Rate limited. Please wait a moment and try again.')
             } else {
@@ -924,7 +921,6 @@ export default function ProjectView({ projectId }) {
                     templates={templates}
                     onSelect={(promptId) => {
                         updateProjectRow(id, row.id, { promptId })
-                        console.log(`[Prompt] Row ${row.id} → ${promptId || 'default'}`)
                     }}
                 />
             )

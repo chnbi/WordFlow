@@ -90,12 +90,10 @@ export default function Glossary() {
             if (hasSelection) {
                 // Selected terms - override existing translations
                 termsToTranslate = terms.filter(term => selectedIds.includes(term.id))
-                console.log(`[Translate] Translating ${termsToTranslate.length} selected glossary terms (override mode)`)
                 toast.info(`Translating ${termsToTranslate.length} selected terms...`)
             } else {
                 // No selection - translate only terms with empty translations (my or cn)
                 termsToTranslate = terms.filter(term => !term.my?.trim() || !term.cn?.trim())
-                console.log(`[Translate] Translating ${termsToTranslate.length} terms with empty translations`)
                 if (termsToTranslate.length === 0) {
                     toast.info('All terms already have translations!')
                     setIsTranslating(false)
@@ -110,7 +108,7 @@ export default function Glossary() {
                 prompt: 'Translate accurately while maintaining the original meaning and tone.'
             }
 
-            console.log(`[Translate] Using template: ${defaultTemplate.name}`)
+
 
             // Call translation API - use en field for source text
             // Call translation API - use en field for source text
@@ -137,13 +135,11 @@ export default function Glossary() {
             }
 
             toast.success(`Successfully translated ${successCount} terms!`)
-            console.log(`[Translate] Completed: ${successCount}/${termsToTranslate.length} terms`)
             setSelectedIds([]) // Clear selection after translation
 
         } catch (error) {
-            console.error('[Translate] Error:', error)
             if (error.message === 'API_NOT_CONFIGURED') {
-                toast.error('Gemini API key not configured. Add VITE_GEMINI_API_KEY to .env')
+                toast.error('AI Translation is currently unavailable')
             } else if (error.message === 'RATE_LIMIT') {
                 toast.error('Rate limited. Please wait a moment and try again.')
             } else {
@@ -480,7 +476,6 @@ export default function Glossary() {
                 setIsImportOpen(false)
             }
         } catch (error) {
-            console.error('Import failed:', error)
             toast.error("Failed to import terms")
         }
     }
@@ -519,7 +514,6 @@ export default function Glossary() {
             setDuplicates([])
             setIsImportOpen(false)
         } catch (error) {
-            console.error('Duplicate resolution failed:', error)
             toast.error("Failed to resolve duplicates")
         }
     }

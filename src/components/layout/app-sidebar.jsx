@@ -516,22 +516,65 @@ export function AppSidebar({ ...props }) {
     // Count project rows pending review
     const projectsToCount = projects
 
+    // Helper to check if a row needs my review
+    const needsMyReview = (row, project) => {
+      if (row.status !== 'review') return false
+
+      // Admins see everything
+      // if (user?.role === 'admin') return true // Optional: if admins should see all. Usually yes.
+
+      const targetLangs = project.targetLanguages || ['my', 'zh']
+      const myLanguages = user?.languages || []
+      const hasLanguageRestriction = isManager && myLanguages.length > 0
+
+      const translations = row.translations || {}
+
+      // Check if ANY target language corresponds to me and is pending
+      return targetLangs.some(lang => {
+        // 1. Language Check
+        if (hasLanguageRestriction && !myLanguages.includes(lang)) return false
+
+        const t = translations[lang] || {}
+        const assignee = t.assignedManagerId
+
+        // 2. Assignment Check (Unassigned OR Assigned to me)
+        if (assignee && assignee !== user?.id) return false
+
+        // 3. Status Check (Must be pending)
+        // The row is in 'review', check specific lang status if available, 
+        // generally if row is review, we assume pending unless specifically approved/rejected
+        if (t.status === 'approved' || t.status === 'changes') return false
+
+        return true
+      })
+    }
+
     for (const project of projectsToCount) {
       const pages = getProjectPages(project.id) || []
       if (pages.length > 0) {
         for (const page of pages) {
           const rows = getPageRows(project.id, page.id) || []
-          count += rows.filter(r => r.status === 'review').length
+          count += rows.filter(r => needsMyReview(r, project)).length
         }
       } else {
         const rows = getProjectRows(project.id) || []
-        count += rows.filter(r => r.status === 'review').length
+        count += rows.filter(r => needsMyReview(r, project)).length
       }
     }
 
     // Only Managers see glossary reviews
     if (isManager) {
-      count += glossaryTerms.filter(t => t.status === 'review').length
+      // Apply similar logic for glossary if needed, or keep simple count for now
+      // Glossary doesn't have assignment logic yet, so keep as is or filter by lang
+      const myLanguages = user?.languages || []
+      if (myLanguages.length > 0) {
+        // Filter glossary terms that match my languages
+        count += glossaryTerms.filter(t => t.status === 'review').length
+        // Ideally check if term has 'en', 'my' etc columns and if I handle them.
+        // For now, keep simple count for glossary to avoid over-engineering without specific request
+      } else {
+        count += glossaryTerms.filter(t => t.status === 'review').length
+      }
     }
 
     return count

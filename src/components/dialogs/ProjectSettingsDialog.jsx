@@ -44,7 +44,6 @@ export function ProjectSettingsDialog({ open, onOpenChange, project }) {
             toast.success("Project settings updated")
             onOpenChange(false)
         } catch (error) {
-            console.error("Failed to update project:", error)
             toast.error("Failed to update settings")
         } finally {
             setIsLoading(false)

@@ -12,7 +12,6 @@ import * as XLSX from 'xlsx'
  */
 export function exportToExcel(data, filename, sheetName = 'Sheet1', columnMapping = null) {
     if (!data || data.length === 0) {
-        console.warn('[Export] No data to export')
         return false
     }
 
@@ -34,26 +33,13 @@ export function exportToExcel(data, filename, sheetName = 'Sheet1', columnMappin
         XLSX.utils.book_append_sheet(wb, ws, sheetName)
         XLSX.writeFile(wb, `${filename}.xlsx`)
 
-        console.log(`[Export] Successfully exported ${data.length} rows to ${filename}.xlsx`)
+
         return true
     } catch (error) {
-        console.error('[Export] Error:', error)
         return false
     }
 }
 
-/**
- * Export project rows to Excel
- * Standard format: English, Bahasa Malaysia, Chinese
- */
-export function exportProjectToExcel(rows, projectName) {
-    const columnMapping = {
-        en: 'English',
-        my: 'Bahasa Malaysia',
-        zh: 'Chinese'
-    }
-    return exportToExcel(rows, `${projectName}_export`, projectName, columnMapping)
-}
 
 /**
  * Export glossary terms to Excel
@@ -68,32 +54,4 @@ export function exportGlossaryToExcel(terms, filename = 'glossary_export') {
         remark: 'Remark'
     }
     return exportToExcel(terms, filename, 'Glossary', columnMapping)
-}
-
-/**
- * Export data to CSV (simpler format)
- */
-export function exportToCSV(data, filename) {
-    if (!data || data.length === 0) {
-        console.warn('[Export] No data to export')
-        return false
-    }
-
-    try {
-        const ws = XLSX.utils.json_to_sheet(data)
-        const csv = XLSX.utils.sheet_to_csv(ws)
-
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `${filename}.csv`
-        link.click()
-        URL.revokeObjectURL(url)
-
-        return true
-    } catch (error) {
-        console.error('[Export] CSV Error:', error)
-        return false
-    }
 }

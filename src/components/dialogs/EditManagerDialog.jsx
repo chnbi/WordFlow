@@ -32,7 +32,6 @@ export default function EditManagerDialog({ open, onOpenChange, user, onSuccess 
             onSuccess?.()
             onOpenChange(false)
         } catch (error) {
-            console.error(error)
             toast.error("Failed to update permissions")
         } finally {
             setSaving(false)

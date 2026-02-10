@@ -77,7 +77,6 @@ export function GlossaryProvider({ children }) {
             }
 
         } catch (error) {
-            console.error('[Firebase] Error loading glossary:', error)
             toast.error("Failed to load glossary")
             setDataSource('error')
         } finally {
@@ -113,7 +112,6 @@ export function GlossaryProvider({ children }) {
 
             return created
         } catch (error) {
-            console.error('Error creating glossary term:', error)
             toast.error("Failed to create term")
             throw error
         }
@@ -137,7 +135,6 @@ export function GlossaryProvider({ children }) {
             setTerms(prev => [...createdTerms, ...prev])
             return createdTerms
         } catch (error) {
-            console.error('Error creating glossary terms:', error)
             toast.error("Failed to import terms")
             throw error
         }
@@ -170,7 +167,6 @@ export function GlossaryProvider({ children }) {
                 content: { before: existingTerm, after: updatedTerm }
             })
         } catch (error) {
-            console.error("Failed to update term", error)
             toast.error("Failed to update term")
         }
     }, [terms, user])
@@ -187,7 +183,6 @@ export function GlossaryProvider({ children }) {
                 content: { before: existingTerm }
             })
         } catch (error) {
-            console.error("Failed to delete term", error)
             toast.error("Failed to delete term")
         }
     }, [terms, user])
@@ -198,7 +193,6 @@ export function GlossaryProvider({ children }) {
             await dbService.deleteGlossaryTerms(ids)
             setTerms(prev => prev.filter(t => !ids.includes(t.id)))
         } catch (error) {
-            console.error("Failed to delete terms", error)
             toast.error("Failed to delete terms")
         }
     }, [])
@@ -210,7 +204,6 @@ export function GlossaryProvider({ children }) {
             setCategories(prev => [...prev, newCat])
             return newCat
         } catch (error) {
-            console.error("Failed to add category", error)
             toast.error("Failed to add category")
             throw error
         }
@@ -222,7 +215,6 @@ export function GlossaryProvider({ children }) {
             await dbService.deleteGlossaryCategory(id)
             setCategories(prev => prev.filter(c => c.id !== id))
         } catch (error) {
-            console.error("Failed to delete category", error)
             toast.error("Failed to delete category")
             throw error
         }

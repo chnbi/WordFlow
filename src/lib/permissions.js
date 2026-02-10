@@ -134,13 +134,6 @@ export const canDo = (role, action) => {
     return permissions[role]?.includes(action) ?? false
 }
 
-/**
- * Check if role is at least a certain level
- */
-export const isAtLeast = (role, minimumRole) => {
-    const hierarchy = [ROLES.EDITOR, ROLES.MANAGER, ROLES.ADMIN]
-    return hierarchy.indexOf(role) >= hierarchy.indexOf(minimumRole)
-}
 
 /**
  * Get role display name

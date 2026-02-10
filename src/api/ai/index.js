@@ -12,7 +12,7 @@ const PROVIDERS = {
 };
 
 // Get default provider from env
-const DEFAULT_PROVIDER = import.meta.env.VITE_DEFAULT_AI_PROVIDER || 'gemini';
+const DEFAULT_PROVIDER = import.meta.env.VITE_DEFAULT_AI_PROVIDER || 'ilmuchat';
 
 /**
  * AI Service Singleton Manager
@@ -25,7 +25,6 @@ export const AIService = (() => {
     const createInstance = (providerName) => {
         const Provider = PROVIDERS[providerName];
         if (!Provider) {
-            console.warn(`[AIService] Unknown provider: ${providerName}, falling back to gemini`);
             return new GeminiProvider();
         }
         return new Provider();
@@ -91,7 +90,6 @@ export const AIService = (() => {
                     }
                 }
             } catch (error) {
-                console.warn('Could not apply user API key:', error.message);
             }
         }
     };

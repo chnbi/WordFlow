@@ -7,7 +7,7 @@ import {
     sendPasswordResetEmail,
     signOut as firebaseSignOut
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { getUser } from '../api/firebase/roles'; // For fetching user role from Firestore
 import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor } from '../lib/permissions';
@@ -35,9 +35,7 @@ export function AuthProvider({ children }) {
 
             setUserRole(role);
             setUserLanguages(languages);
-            console.log('[Firebase] User profile loaded:', { role, languages });
         } catch (error) {
-            console.error('[Firebase] Error loading user profile:', error);
             setUserRole(ROLES.EDITOR);
             setUserLanguages([]);
         }
@@ -45,15 +43,35 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         // Listen for auth changes
-        const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (authUser) => {
             if (authUser) {
+                // Initial set from Auth
                 setUser({
                     id: authUser.uid,
                     email: authUser.email,
                     name: authUser.displayName || authUser.email.split('@')[0],
                     avatar: authUser.photoURL
                 });
-                await loadUserProfile(authUser.uid);
+
+                // Set up real-time listener for Firestore profile
+                // This ensures updates to Name/Avatar/Role/Languages are reflected immediately
+                const userRef = doc(db, 'users', authUser.uid);
+                const unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setUser(prev => ({
+                            ...prev,
+                            name: data.name || prev?.name,
+                            avatar: data.avatar || prev?.avatar,
+                            // We also update role/languages here to be reactive
+                        }));
+                        setUserRole(data.role || ROLES.EDITOR);
+                        setUserLanguages(data.languages || []);
+                    }
+                });
+
+                // Cleanup snapshot listener on auth change/unmount
+                return () => unsubscribeSnapshot();
             } else {
                 setUser(null);
                 setUserRole(ROLES.EDITOR);
@@ -62,16 +80,14 @@ export function AuthProvider({ children }) {
             loading && setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, [loadUserProfile]); // loading dependency removed to avoid loops
+        return () => unsubscribeAuth();
+    }, []);
 
     const signIn = async (email, password) => {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            console.log('[Firebase] User signed in:', userCredential.user.email);
             return userCredential.user;
         } catch (error) {
-            console.error('Sign in error:', error);
             // Throw existing error for UI handling
             throw error;
         }
@@ -93,19 +109,11 @@ export function AuthProvider({ children }) {
                 avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || email)}&background=random`
             });
 
-            console.log('[Firebase] User signed up:', user.email);
+
             return user;
         } catch (error) {
-            console.error('Sign up error:', error);
             throw error;
         }
-    };
-
-    // OAuth not yet configured in Firebase console, but placeholder:
-    const signInWithOAuth = async (provider = 'google') => {
-        console.warn('OAuth not yet implemented in Firebase adapter');
-        // Implementation would use signInWithPopup(auth, new GoogleAuthProvider())
-        throw new Error('OAuth not supported yet');
     };
 
     const signOut = async () => {
@@ -114,11 +122,9 @@ export function AuthProvider({ children }) {
             setUser(null);
             setUserRole(ROLES.EDITOR);
             setUserLanguages([]);
-            console.log('[Firebase] User signed out');
             // Reload not strictly necessary with Firebase listener, but good for clearing state
             window.location.reload();
         } catch (error) {
-            console.error('Sign out error:', error);
             throw error;
         }
     };
@@ -126,9 +132,7 @@ export function AuthProvider({ children }) {
     const resetPassword = async (email) => {
         try {
             await sendPasswordResetEmail(auth, email);
-            console.log('[Firebase] Password reset email sent to:', email);
         } catch (error) {
-            console.error('Reset password error:', error);
             throw error;
         }
     };
@@ -145,7 +149,6 @@ export function AuthProvider({ children }) {
         loading,
         signIn,
         signUp,
-        signInWithOAuth,
         signOut,
         resetPassword,
         canDo,

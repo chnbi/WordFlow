@@ -91,8 +91,6 @@ export const DEFAULT_SOURCE_LANGUAGE = 'en'
 // Default target languages for new projects
 export const DEFAULT_TARGET_LANGUAGES = ['my', 'zh']
 
-// Get all language codes as array
-export const getLanguageCodes = () => Object.keys(LANGUAGES)
 
 // Get languages as array for dropdowns
 export const getLanguagesArray = () => Object.values(LANGUAGES)
@@ -230,19 +228,3 @@ export const COLORS = {
     primaryLightest: '#FFE5EC',
 }
 
-// Helper to get color with optional opacity
-export const getColor = (colorPath, opacity = 1) => {
-    const parts = colorPath.split('.')
-    let value = COLORS
-    for (const part of parts) {
-        value = value?.[part]
-    }
-    if (!value || typeof value !== 'string') return colorPath
-    if (opacity === 1) return value
-    // Convert hex to rgba
-    const hex = value.replace('#', '')
-    const r = parseInt(hex.substring(0, 2), 16)
-    const g = parseInt(hex.substring(2, 4), 16)
-    const b = parseInt(hex.substring(4, 6), 16)
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`
-}

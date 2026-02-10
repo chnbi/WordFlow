@@ -46,7 +46,6 @@ export default function ManageCategoriesDialog({ open, onOpenChange }) {
             setNewCategory("")
             toast.success("Category added")
         } catch (error) {
-            console.error("Failed to add category", error)
             toast.error("Failed to add category")
         } finally {
             setIsLoading(false)
@@ -59,7 +58,6 @@ export default function ManageCategoriesDialog({ open, onOpenChange }) {
                 await deleteCategory(id)
                 toast.success("Category deleted")
             } catch (error) {
-                console.error("Failed to delete category", error)
                 toast.error("Failed to delete category")
             }
         }

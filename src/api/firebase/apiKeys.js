@@ -59,10 +59,9 @@ export async function saveUserApiKeys(userId, keys) {
         cachedKeys = updatedKeys;
         cachedUserId = userId;
 
-        console.log('✅ [API Keys] Saved user API keys');
+
         return true;
     } catch (error) {
-        console.error('Error saving API keys:', error);
         throw error;
     }
 }
@@ -92,7 +91,7 @@ export async function getEffectiveApiKey(userId, provider) {
 
     // Fallback to environment variable
     const envKeys = {
-        gemini: import.meta.env.VITE_GEMINI_API_KEY,
+        gemini: null, // Removed for production
         ilmuchat: import.meta.env.VITE_ILMUCHAT_API_KEY
     };
 

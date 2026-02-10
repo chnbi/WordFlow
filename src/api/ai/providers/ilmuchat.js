@@ -36,7 +36,6 @@ export class ILMUchatProvider extends BaseAIProvider {
      */
     initialize() {
         if (!this.apiKey) {
-            console.warn('[ILMUchat] No API Key found');
             return false;
         }
         return true;
@@ -119,7 +118,6 @@ export class ILMUchatProvider extends BaseAIProvider {
     async _executeOpenAICompatible(messages, maxTokens = 4096) {
         const start = Date.now();
 
-        console.log('[ILMUchat] Requesting:', this.endpoint, 'Key present:', !!this.apiKey, 'Key length:', this.apiKey?.length);
 
         const response = await fetch(this.endpoint, {
             method: 'POST',
@@ -137,7 +135,7 @@ export class ILMUchatProvider extends BaseAIProvider {
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            console.error('[ILMUchat] API Error:', response.status, error);
+
 
             if (response.status === 429) throw new Error('RATE_LIMIT');
             throw new Error(error.error?.message || `API Error: ${response.status}`);
@@ -151,7 +149,6 @@ export class ILMUchatProvider extends BaseAIProvider {
     }
 
     _handleError(error) {
-        console.error('[ILMUchat] Error:', error);
         throw error;
     }
 
@@ -236,7 +233,6 @@ ${terms.map(t => `- ${t.english || t.term}: ${JSON.stringify(t.translations || {
                 };
             });
         } catch (e) {
-            console.error('JSON Parse Error:', text);
             throw new Error('AI_RESPONSE_PARSE_FAILED');
         }
     }

@@ -67,7 +67,6 @@ export default function Submissions() {
             // Store all records
             setAllSubmissions(records)
         } catch (error) {
-            console.error('Error loading submissions:', error)
             toast.error('Failed to load submissions')
         } finally {
             setIsLoading(false)

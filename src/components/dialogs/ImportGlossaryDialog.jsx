@@ -40,7 +40,6 @@ export default function ImportGlossaryDialog({ open, onOpenChange, onImport }) {
             const sheetEntry = Object.entries(parsed).find(([_, data]) => data.entries && data.entries.length > 0)
 
             if (!sheetEntry) {
-                console.warn(`No data found in ${selectedFile.name}`)
                 setIsLoading(false)
                 return
             }
@@ -75,7 +74,6 @@ export default function ImportGlossaryDialog({ open, onOpenChange, onImport }) {
             })
 
         } catch (error) {
-            console.error("Error reading file:", error)
         } finally {
             setIsLoading(false)
         }

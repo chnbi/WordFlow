@@ -290,7 +290,6 @@ export async function exportToDocx(rows, filename, options = {}) {
     link.click();
     URL.revokeObjectURL(url);
 
-    console.log(`[DOCX Export] Successfully exported ${rows.length} rows to ${filename}.docx`);
     return true;
 }
 
@@ -470,9 +469,7 @@ export async function exportToPptx(rows, filename, options = {}) {
 
     try {
         await pptx.writeFile({ fileName: `${filename}.pptx` });
-        console.log(`[PPTX Export] Exported to ${filename}.pptx`);
     } catch (error) {
-        console.error('PPTX Export failed:', error);
         throw error;
     }
 }

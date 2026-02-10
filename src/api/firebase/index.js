@@ -43,7 +43,6 @@ export {
     updateGlossaryTerm,
     deleteGlossaryTerm,
     deleteGlossaryTerms,
-    seedDefaultGlossary,
     getGlossaryCategories,
     createGlossaryCategory,
     deleteGlossaryCategory

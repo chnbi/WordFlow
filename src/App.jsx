@@ -46,12 +46,8 @@ function App() {
                     avatar: userData.avatar
                 });
                 setCurrentRole(userData.role || ROLES.MANAGER);
-                console.log('[Firebase] Dev user role loaded:', userData.role);
-            } else {
-                console.log('[Firebase] No user found, using default dev role');
             }
         } catch (error) {
-            console.log('[Firebase] Could not load dev user, using defaults:', error.message);
         } finally {
             setLoading(false);
         }

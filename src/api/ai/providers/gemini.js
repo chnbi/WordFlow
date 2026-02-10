@@ -13,7 +13,7 @@ const getLangName = (code) => {
 export class GeminiProvider extends BaseAIProvider {
     constructor(config = {}) {
         super(config);
-        this.apiKey = config.apiKey || import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+        this.apiKey = config.apiKey; // Removed default env vars
         this.model = config.model || import.meta.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
         this.client = null;
     }
@@ -23,7 +23,6 @@ export class GeminiProvider extends BaseAIProvider {
      */
     initialize() {
         if (!this.apiKey) {
-            console.warn('[Gemini] No API Key found');
             return false;
         }
         this.client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -181,13 +180,11 @@ Return a valid JSON array where each item has:
         } else if (typeof result?.candidates?.[0]?.content?.parts?.[0]?.text === 'string') {
             return result.candidates[0].content.parts[0].text;
         } else {
-            console.error('[Gemini] Unexpected response structure');
             throw new Error('AI_INVALID_RESPONSE_STRUCTURE');
         }
     }
 
     _handleError(error) {
-        console.error('[Gemini] Error:', error.message || error);
         if (error.status === 429) throw new Error('RATE_LIMIT');
         throw error;
     }
@@ -267,7 +264,6 @@ ${relevant.map(t => `| ${t.english || t.term} | ${JSON.stringify(t.translations 
                 return { id: item.id, translations };
             });
         } catch (e) {
-            console.error('JSON Parse Error:', text);
             throw new Error('AI_RESPONSE_PARSE_FAILED');
         }
     }
@@ -281,7 +277,6 @@ ${relevant.map(t => `| ${t.english || t.term} | ${JSON.stringify(t.translations 
                 en: item.text || '' // Default 'en' to text
             }));
         } catch (e) {
-            console.error('OCR Parse Error:', text);
             return []; // Fail gracefully for OCR
         }
     }
@@ -304,7 +299,6 @@ ${relevant.map(t => `| ${t.english || t.term} | ${JSON.stringify(t.translations 
                 return result;
             });
         } catch (e) {
-            console.error('Extract+Translate Parse Error:', text);
             return [];
         }
     }

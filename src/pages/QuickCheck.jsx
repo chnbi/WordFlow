@@ -53,7 +53,6 @@ export default function QuickCheck() {
         setHasTranslated(false)
 
         try {
-            console.log('Call params:', { sourceText, sourceLanguage, targetLanguage, defaultTemplate })
             const results = await getAI().generateBatch(
                 [{ id: 1, text: sourceText }],
                 {
@@ -63,13 +62,12 @@ export default function QuickCheck() {
                     template: defaultTemplate
                 }
             )
-            console.log('API Results:', results)
+
 
             const result = results[0]
             // Fix: Provider returns { translations: { [lang]: { text: "..." } } }
             const translatedContent = result?.translations?.[targetLanguage]?.text || result?.[targetLanguage] || ''
 
-            console.log('Extracted content:', translatedContent, 'for target:', targetLanguage)
             setTranslatedText(translatedContent)
             setHasTranslated(true)
             setIsEditing(false)
@@ -78,7 +76,6 @@ export default function QuickCheck() {
                 toast.error('Translation failed')
             }
         } catch (error) {
-            console.error('Translation error:', error)
             if (error.message === 'API_NOT_CONFIGURED') {
                 toast.error('API key not configured. Check settings.')
             } else {

@@ -34,8 +34,8 @@ export default function Settings() {
     const [isPasswordOpen, setIsPasswordOpen] = useState(false)
 
     // API Key Management State
-    const [apiKeys, setApiKeys] = useState({ gemini: '', ilmuchat: '' })
-    const [showKeys, setShowKeys] = useState({ gemini: false, ilmuchat: false })
+    const [apiKeys, setApiKeys] = useState({ ilmuchat: '' })
+    const [showKeys, setShowKeys] = useState({ ilmuchat: false })
     const [savingKeys, setSavingKeys] = useState(false)
 
     // Manager Settings State
@@ -57,7 +57,6 @@ export default function Settings() {
             toast.success('Manager languages updated')
             setTimeout(() => window.location.reload(), 1000)
         } catch (error) {
-            console.error(error)
             toast.error('Failed to update languages')
         } finally {
             setSavingLangs(false)
@@ -78,7 +77,6 @@ export default function Settings() {
             if (user?.id) {
                 const keys = await getUserApiKeys(user.id)
                 setApiKeys({
-                    gemini: keys.gemini || '',
                     ilmuchat: keys.ilmuchat || ''
                 })
             }
@@ -118,7 +116,6 @@ export default function Settings() {
             await saveUserApiKeys(user.id, apiKeys)
             toast.success('API keys saved successfully')
         } catch (error) {
-            console.error('Error saving API keys:', error)
             toast.error('Failed to save API keys')
         } finally {
             setSavingKeys(false)
@@ -126,14 +123,13 @@ export default function Settings() {
     }
 
     // Load current AI provider
-    const [currentProvider, setCurrentProvider] = useState('gemini')
+    const [currentProvider, setCurrentProvider] = useState('ilmuchat')
     useEffect(() => {
         const loadProvider = async () => {
             try {
                 const { AIService } = await import('@/api/ai')
                 setCurrentProvider(AIService.getCurrentProvider())
             } catch (e) {
-                console.error("Failed to load AI provider", e)
             }
         }
         loadProvider()
@@ -199,7 +195,6 @@ export default function Settings() {
                                         toast.success(`Switched to ${e.target.value}`);
                                     }}
                                 >
-                                    <option value="gemini">🧠 Google Gemini</option>
                                     <option value="ilmuchat">💬 ILMUchat (YTL)</option>
                                 </select>
                                 <Button
@@ -209,12 +204,12 @@ export default function Settings() {
                                         try {
                                             const { getAI, AIService } = await import('@/api/ai')
                                             if (user?.id) await AIService.applyUserApiKey(user.id)
-                                            const ai = getAI()
+                                            // Ensure we get the current provider
+                                            const ai = getAI(currentProvider)
                                             const res = await ai.testConnection()
                                             if (res.success) toast.success(`Connected! Response: ${res.message}`, { id: toastId })
                                             else throw new Error(res.message || "Connection failed")
                                         } catch (err) {
-                                            console.error(err)
                                             toast.error("Connection Failed. Check API Key.", { id: toastId })
                                         }
                                     }}
@@ -224,56 +219,11 @@ export default function Settings() {
                             </div>
 
                             <div className="space-y-4 pt-4 border-t border-border">
-                                <h4 className="text-sm font-medium text-foreground">Your API Keys</h4>
+                                <h4 className="text-sm font-medium text-foreground">Connection Status</h4>
                                 <p className="text-xs text-muted-foreground">
-                                    Enter your own API keys to use instead of the default. Leave blank to use environment defaults.
+                                    API keys are managed via environment variables. Click below to verify connectivity.
                                 </p>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-muted-foreground">Google Gemini API Key</label>
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                            <input
-                                                type={showKeys.gemini ? 'text' : 'password'}
-                                                value={apiKeys.gemini}
-                                                onChange={(e) => setApiKeys(prev => ({ ...prev, gemini: e.target.value }))}
-                                                placeholder="AIzaSy..."
-                                                className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowKeys(prev => ({ ...prev, gemini: !prev.gemini }))}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                            >
-                                                {showKeys.gemini ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-muted-foreground">ILMUchat API Key</label>
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                            <input
-                                                type={showKeys.ilmuchat ? 'text' : 'password'}
-                                                value={apiKeys.ilmuchat}
-                                                onChange={(e) => setApiKeys(prev => ({ ...prev, ilmuchat: e.target.value }))}
-                                                placeholder="sk-..."
-                                                className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowKeys(prev => ({ ...prev, ilmuchat: !prev.ilmuchat }))}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                            >
-                                                {showKeys.ilmuchat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <Button onClick={handleSaveApiKeys} disabled={savingKeys} className="w-full">
-                                    <Save className="w-4 h-4 mr-2" />
-                                    {savingKeys ? 'Saving...' : 'Save API Keys'}
-                                </Button>
+                                {/* Inputs removed for production security */}
                             </div>
                         </div>
                     </details>

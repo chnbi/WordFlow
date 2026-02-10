@@ -331,7 +331,6 @@ export default function Approvals() {
             setLocalRemarks({})
             setSelectedIds([])
         } catch (error) {
-            console.error('Error saving items:', error)
             toast.error("Failed to save items")
         }
     }
@@ -778,7 +777,6 @@ export default function Approvals() {
 
                         // Force refresh logic if needed, but context subscription should handle it
                     } catch (error) {
-                        console.error("Reassign error:", error)
                         toast.error("Failed to reassign task")
                     }
                 }}

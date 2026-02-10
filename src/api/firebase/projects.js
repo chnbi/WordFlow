@@ -181,8 +181,10 @@ export async function addPageRows(projectId, pageId, rows) {
 
         rows.forEach((row, i) => {
             const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
+            // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
+            const { id: _tempId, ...rowWithoutId } = row;
             const rowData = {
-                ...row,
+                ...rowWithoutId,
                 project: projectId,
                 pageId: pageId,
                 order: i,
@@ -191,7 +193,7 @@ export async function addPageRows(projectId, pageId, rows) {
                 updatedAt: serverTimestamp()
             };
             batch.set(rowRef, rowData);
-            results.push({ id: rowRef.id, ...rowData });
+            results.push({ ...rowData, id: rowRef.id });
         });
 
         await batch.commit();

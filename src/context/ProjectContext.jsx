@@ -19,7 +19,6 @@ export function ProjectProvider({ children }) {
             const terms = await dbService.getApprovedGlossaryTerms()
             return terms
         } catch (error) {
-            console.warn('[Translation] Failed to fetch glossary:', error)
             return []
         }
     }, [])
