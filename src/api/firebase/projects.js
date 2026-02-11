@@ -176,27 +176,35 @@ export async function getPageRows(projectId, pageId) {
 
 export async function addPageRows(projectId, pageId, rows) {
     try {
-        const batch = writeBatch(db);
         const results = [];
+        const CHUNK_SIZE = 400; // Safety margin below 500 limit
 
-        rows.forEach((row, i) => {
-            const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
-            // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
-            const { id: _tempId, ...rowWithoutId } = row;
-            const rowData = {
-                ...rowWithoutId,
-                project: projectId,
-                pageId: pageId,
-                order: i,
-                status: row.status || 'draft',
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            };
-            batch.set(rowRef, rowData);
-            results.push({ ...rowData, id: rowRef.id });
-        });
+        for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rows.slice(i, i + CHUNK_SIZE);
+            const chunkResults = [];
 
-        await batch.commit();
+            chunk.forEach((row, index) => {
+                const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
+                // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
+                const { id: _tempId, ...rowWithoutId } = row;
+                const rowData = {
+                    ...rowWithoutId,
+                    project: projectId,
+                    pageId: pageId,
+                    order: i + index, // Correct global order
+                    status: row.status || 'draft',
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                };
+                batch.set(rowRef, rowData);
+                chunkResults.push({ ...rowData, id: rowRef.id });
+            });
+
+            await batch.commit();
+            results.push(...chunkResults);
+        }
+
         await updateProject(projectId, {});
         return results;
     } catch (error) {
@@ -255,15 +263,23 @@ export async function updateProjectRow(projectId, rowId, updates) {
 
 export async function updateProjectRows(projectId, rowUpdates) {
     try {
-        const batch = writeBatch(db);
-        rowUpdates.forEach(({ id, changes }) => {
-            const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
-            batch.update(rowRef, {
-                ...changes,
-                updatedAt: serverTimestamp()
+        const CHUNK_SIZE = 400;
+
+        for (let i = 0; i < rowUpdates.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowUpdates.slice(i, i + CHUNK_SIZE);
+
+            chunk.forEach(({ id, changes }) => {
+                const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+                batch.update(rowRef, {
+                    ...changes,
+                    updatedAt: serverTimestamp()
+                });
             });
-        });
-        await batch.commit();
+
+            await batch.commit();
+        }
+
         await updateProject(projectId, {});
     } catch (error) {
         console.error('Error updating rows:', error);
@@ -273,12 +289,20 @@ export async function updateProjectRows(projectId, rowUpdates) {
 
 export async function deletePageRows(projectId, pageId, rowIds) {
     try {
-        const batch = writeBatch(db);
-        rowIds.forEach(id => {
-            const rowRef = doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', id);
-            batch.delete(rowRef);
-        });
-        await batch.commit();
+        const CHUNK_SIZE = 400;
+
+        for (let i = 0; i < rowIds.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowIds.slice(i, i + CHUNK_SIZE);
+
+            chunk.forEach(id => {
+                const rowRef = doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', id);
+                batch.delete(rowRef);
+            });
+
+            await batch.commit();
+        }
+
         await updateProject(projectId, {});
     } catch (error) {
         console.error('Error deleting page rows:', error);
@@ -288,12 +312,20 @@ export async function deletePageRows(projectId, pageId, rowIds) {
 
 export async function deleteProjectRows(projectId, rowIds) {
     try {
-        const batch = writeBatch(db);
-        rowIds.forEach(id => {
-            const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
-            batch.delete(rowRef);
-        });
-        await batch.commit();
+        const CHUNK_SIZE = 400;
+
+        for (let i = 0; i < rowIds.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowIds.slice(i, i + CHUNK_SIZE);
+
+            chunk.forEach(id => {
+                const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+                batch.delete(rowRef);
+            });
+
+            await batch.commit();
+        }
+
         await updateProject(projectId, {});
     } catch (error) {
         console.error('Error deleting project rows:', error);

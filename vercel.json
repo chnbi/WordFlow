@@ -5,6 +5,14 @@
             "destination": "https://api.ytlailabs.tech/:path*"
         },
         {
+            "source": "/wordflow/assets/:path*",
+            "destination": "/assets/:path*"
+        },
+        {
+            "source": "/wordflow/:path*",
+            "destination": "/index.html"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }
