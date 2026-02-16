@@ -45,6 +45,7 @@ export const ACTIONS = {
     CREATE_GLOSSARY: 'create_glossary',
     EDIT_GLOSSARY: 'edit_glossary',
     DELETE_GLOSSARY: 'delete_glossary',
+    APPROVE_GLOSSARY: 'approve_glossary', // New
 
     // Prompts (All roles)
     CREATE_PROMPT: 'create_prompt',
@@ -72,7 +73,8 @@ const permissions = {
         ACTIONS.MANAGE_USERS,
         ACTIONS.ASSIGN_LANGUAGES,
         ACTIONS.MANAGE_CATEGORIES,
-        ACTIONS.CONFIGURE_SETTINGS,
+        // Removed CONFIGURE_SETTINGS (Admin only)
+
         // Review
         ACTIONS.APPROVE_TRANSLATION,
         ACTIONS.REJECT_TRANSLATION,
@@ -87,6 +89,7 @@ const permissions = {
         ACTIONS.CREATE_GLOSSARY,
         ACTIONS.EDIT_GLOSSARY,
         ACTIONS.DELETE_GLOSSARY,
+        ACTIONS.APPROVE_GLOSSARY, // New Action
         // Prompts
         ACTIONS.CREATE_PROMPT,
         ACTIONS.EDIT_PROMPT,
@@ -103,23 +106,28 @@ const permissions = {
     ],
 
     [ROLES.EDITOR]: [
-        // Content
-        ACTIONS.CREATE_PROJECT,
-        ACTIONS.EDIT_PROJECT,
-        ACTIONS.DELETE_PROJECT,
-        ACTIONS.IMPORT_PROJECT,
-        ACTIONS.EXPORT_PROJECT,
-        // Glossary
-        ACTIONS.CREATE_GLOSSARY,
-        ACTIONS.EDIT_GLOSSARY,
-        ACTIONS.DELETE_GLOSSARY,
-        // Prompts
-        ACTIONS.CREATE_PROMPT,
-        ACTIONS.EDIT_PROMPT,
-        ACTIONS.DELETE_PROMPT,
-        // Translation
+        // Content - VIEW ONLY
+        // Removed CREATE/EDIT/DELETE PROJECT
+        // Removed IMPORT/EXPORT
+
+        // Glossary - VIEW ONLY
+        // Removed CREATE/EDIT/DELETE GLOSSARY
+
+        // Prompts - VIEW ONLY
+        // Removed CREATE/EDIT/DELETE PROMPT
+
+        // Translation - WORKER
         ACTIONS.TRANSLATE_ROW,
         ACTIONS.EDIT_TRANSLATION,
+
+        // Glossary - Create/Edit (No Delete)
+        ACTIONS.CREATE_GLOSSARY,
+        ACTIONS.EDIT_GLOSSARY,
+
+        // Prompts - Create/Edit (No Delete)
+        ACTIONS.CREATE_PROMPT,
+        ACTIONS.EDIT_PROMPT,
+
         // Read
         ACTIONS.VIEW_PROJECT,
         ACTIONS.VIEW_GLOSSARY,

@@ -14,20 +14,29 @@ import { useAuth } from "@/context/DevAuthContext"
 import * as XLSX from "xlsx"
 import { parseExcelFile } from "@/lib/excel"
 import { exportToDocx, exportToPptx } from "@/lib/document"
+import { cn, handleTranslationError } from "@/lib/utils"
 import { getAI } from "@/api/ai"
 import { toast } from "sonner"
 import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
 import { PromptCategoryDropdown } from "@/components/ui/PromptCategoryDropdown"
+import { logAction, AUDIT_ACTIONS } from "@/api/firebase"
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog"
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown"
 import { getStatusConfig, LANGUAGES } from "@/lib/constants"
 
-import { ConfirmDialog, ProjectSettingsDialog, SendForReviewDialog } from "@/components/dialogs"
+import { ConfirmDialog, ImportFileDialog, ProjectSettingsDialog, SendForReviewDialog } from "@/components/dialogs"
 import { getUsers } from "@/api/firebase"
 import { GlossaryHighlighter } from "@/components/ui/GlossaryHighlighter"
 import { ExportMenu } from "@/components/project"
@@ -58,7 +67,7 @@ export default function ProjectView({ projectId }) {
 
     const { templates } = usePrompts()
     const { approvedTerms: glossaryTerms } = useGlossary() // Use APPOVED terms for highlighting
-    const { canDo } = useAuth()
+    const { user, canDo, isManager } = useAuth()
     const { markAsViewed, isRowNew } = useApprovalNotifications()
 
     const [isAddingRow, setIsAddingRow] = useState(false)
@@ -76,6 +85,8 @@ export default function ProjectView({ projectId }) {
     const [editingRowData, setEditingRowData] = useState(null) // Data for row being edited
 
     const [editWarning, setEditWarning] = useState(null) // { open: boolean, row: object }
+    // Remarks Dialog State
+    const [remarkDialog, setRemarkDialog] = useState({ open: false, row: null, text: '' })
 
     // Manager Assignment
     const [sendForReviewOpen, setSendForReviewOpen] = useState(false)
@@ -90,6 +101,18 @@ export default function ProjectView({ projectId }) {
 
     // Prompt Selection State
     const [selectedPromptId, setSelectedPromptId] = useState(null)
+    const [usersMap, setUsersMap] = useState({})
+
+    // Fetch users for metadata display
+    useEffect(() => {
+        getUsers().then(users => {
+            const map = {}
+            if (users) {
+                users.forEach(u => map[u.id] = u.name || u.displayName || u.email || 'Unknown')
+                setUsersMap(map)
+            }
+        }).catch(err => console.error("Failed to load users for metadata", err))
+    }, [])
 
     // Set default prompt when templates load
     useEffect(() => {
@@ -99,7 +122,7 @@ export default function ProjectView({ projectId }) {
         }
     }, [templates, selectedPromptId])
 
-    const fileInputRef = useRef(null)
+    const [isImportOpen, setIsImportOpen] = useState(false)
 
     // Parse project ID and page ID from URL
     // Parse project ID and page ID from URL
@@ -331,8 +354,9 @@ export default function ProjectView({ projectId }) {
         }
     }
 
-    const handleImportSheet = async (event) => {
-        const file = event.target.files?.[0]
+    const handleImportSheet = async (fileOrEvent) => {
+        // Support both file object (from dialog) and event (fallback)
+        const file = fileOrEvent?.target ? fileOrEvent.target.files?.[0] : fileOrEvent
         if (!file) return
 
         setIsImporting(true)
@@ -347,17 +371,21 @@ export default function ProjectView({ projectId }) {
                 })).filter(row => row.en)
 
                 if (newRows.length > 0) {
-                    if (typeof addProjectPage === 'function') {
-                        await addProjectPage(id, { name: sheetName }, newRows)
-                    } else {
+                    if (typeof addPageRows === 'function' && getSelectedPageId && getSelectedPageId(id)) {
+                        // Add to CURRENT page
+                        await addPageRows(id, getSelectedPageId(id), newRows)
+                    } else if (typeof addProjectRows === 'function') {
+                        // Fallback for non-paged projects
                         await addProjectRows(id, newRows)
                     }
                 }
             }
+            toast.success("Import successful")
         } catch (error) {
+            console.error("Import error:", error)
+            toast.error("Failed to import file")
         } finally {
             setIsImporting(false)
-            fileInputRef.current.value = ''
         }
     }
 
@@ -446,7 +474,41 @@ export default function ProjectView({ projectId }) {
         setDeleteConfirm({ type: 'bulk', count: selectedCount })
     }
 
+    // Generic confirm action handler (Delete / Bypass)
     const performDelete = async () => {
+        if (!deleteConfirm) return
+
+        // Handle Bypass Approval
+        if (deleteConfirm.type === 'bypass_approval') {
+            const rowsComponents = deleteConfirm.data
+            const updates = rowsComponents.map(row => ({
+                id: row.id,
+                changes: {
+                    status: 'approved', // Direct approval
+                    approvedBy: {
+                        uid: user.id || user.uid,
+                        email: user.email,
+                        name: user.displayName || user.name || user.email?.split('@')[0]
+                    },
+                    approvedAt: new Date().toISOString()
+                }
+            }))
+
+            try {
+                for (const u of updates) {
+                    await updateProjectRow(id, u.id, u.changes)
+                }
+
+                toast.success(`Straight to approved! (${rowsComponents.length} rows)`)
+                setDeleteConfirm(null)
+                deselectAllRows(id)
+            } catch (error) {
+                toast.error("Failed to approve rows")
+            }
+            return
+        }
+
+        // Handle Delete
         try {
             const idsToDelete = deleteConfirm.type === 'single' ? [deleteConfirm.id] : Array.from(selectedRowIds)
             await deleteRows(id, idsToDelete)
@@ -519,7 +581,6 @@ export default function ProjectView({ projectId }) {
                 en: editingRowData.en, // Legacy field
                 translations: updatedTranslations,
                 status: 'draft', // Reset row status
-                // Also write legacy fields for compatibility
                 ...Object.fromEntries(targetLanguages.map(lang => [lang, editingRowData[lang] || '']))
             })
             toast.success('Row updated')
@@ -539,8 +600,47 @@ export default function ProjectView({ projectId }) {
         }
     }
 
+    // Remark Handlers
+    const handleOpenRemark = (row) => {
+        setRemarkDialog({
+            open: true,
+            row: row,
+            text: row.remarks || row.remark || ''
+        })
+    }
+
+    const handleSaveRemark = async () => {
+        if (!remarkDialog.row) return
+
+        try {
+            await updateProjectRow(id, remarkDialog.row.id, {
+                remarks: remarkDialog.text,
+                remarkMetadata: {
+                    uid: user?.id || user?.uid,
+                    name: user?.displayName || user?.name || 'Unknown',
+                    updatedAt: new Date().toISOString()
+                }
+            })
+
+            // Log Audit Action
+            if (user) {
+                await logAction(user, 'ROW_REMARK_EDITED', 'row', remarkDialog.row.id, {
+                    projectId: id,
+                    content: `Updated remark for row in ${currentTitle}`,
+                    oldRemark: remarkDialog.row.remarks || '',
+                    newRemark: remarkDialog.text
+                })
+            }
+
+            toast.success("Remark updated")
+            setRemarkDialog({ open: false, row: null, text: '' })
+        } catch (error) {
+            console.error("Remark save error:", error)
+            toast.error(`Failed to save remark: ${error.message}`)
+        }
+    }
+
     // Send selected rows for review
-    // Send rows for review
     const handleSendForReview = async () => {
         let candidates = []
 
@@ -559,6 +659,26 @@ export default function ProjectView({ projectId }) {
         }
 
         // Store rows and fetch managers, then open dialog
+        // Check for Bypass Condition (Manager Only)
+        // User requested: "do not allow editor to bypass, even they are project owner"
+        const canBypass = isManager
+
+        if (canBypass) {
+            // Check if user is assigning to themselves or just wants to approve immediately
+            // For now, we'll ask them: "Do you want to send for review or approve immediately?"
+            setRowsToSend(candidates)
+            // We reuse the confirm dialog for this choice
+            setDeleteConfirm({ // Using deleteConfirm state for generic confirmation
+                type: 'bypass_approval',
+                data: candidates,
+                title: 'Bypass Approval?',
+                message: `You are a manager. You can approve these ${candidates.length} row(s) immediately.`,
+                confirmText: 'Approve Immediately',
+                cancelText: 'Send for Review'
+            })
+            return
+        }
+
         setRowsToSend(candidates)
 
         // Fetch managers if not loaded
@@ -620,60 +740,37 @@ export default function ProjectView({ projectId }) {
     const handleTranslateAll = async () => {
         setIsTranslating(true)
         try {
-            // Determine which rows to translate
+            // 1. Identify rows to translate
             let rowsToTranslate
-            const hasSelection = selectedCount > 0
+            let mode
+            const hasSelection = selectedRowIds && selectedRowIds.size > 0
 
             if (hasSelection) {
                 // Selected rows - override existing translations
                 rowsToTranslate = rows.filter(row => selectedRowIds.has(row.id))
-                toast.info(`Translating ${rowsToTranslate.length} selected rows...`)
+                mode = 'selection'
             } else {
-                // No selection - translate only rows with at least one empty target language
+                // No selection - only translate rows with empty translations
                 rowsToTranslate = rows.filter(row => {
                     return targetLanguages.some(lang => {
-                        const v2Text = row.translations?.[lang]?.text
-                        const legacyText = row[lang]
-                        const text = v2Text || legacyText || ''
+                        const text = row.translations?.[lang]?.text || row[lang] || ''
                         return !text.trim()
                     })
                 })
-                if (rowsToTranslate.length === 0) {
-                    toast.info('All rows already have translations!')
-                    setIsTranslating(false)
-                    return
-                }
-                toast.info(`Translating ${rowsToTranslate.length} empty rows...`)
+                mode = 'empty'
             }
 
-            // Get templates - published templates + always include default (even if draft)
-            const defaultTemplate = templates.find(t => t.isDefault)
+            if (rowsToTranslate.length === 0) {
+                toast.info(mode === 'selection' ? 'No rows selected' : 'All rows already have translations!')
+                setIsTranslating(false)
+                return
+            }
+
+            toast.info(`Translating ${rowsToTranslate.length} rows (${mode === 'selection' ? 'Selected' : 'Empty'})...`)
+
+            // 2. Prepare templates
             const publishedTemplates = templates.filter(t => t.status !== 'draft' || t.isDefault)
-
-            // Determine which prompt to use:
-            // 1. If selected rows have a promptId set, use that (per-row selection)
-            // 2. Otherwise use Action Bar dropdown selection
-            // 3. Fallback to default template
-            let effectivePromptId = selectedPromptId
-
-            // Check if selected rows have a specific promptId assigned
-            if (hasSelection && rowsToTranslate.length > 0) {
-                const rowPromptIds = rowsToTranslate.map(r => r.promptId).filter(Boolean)
-                if (rowPromptIds.length > 0) {
-                    // Use the first row's promptId (all selected rows should ideally have the same)
-                    const firstRowPromptId = rowPromptIds[0]
-                    // Check if all selected rows have the same promptId
-                    const allSame = rowPromptIds.every(id => id === firstRowPromptId)
-                    if (allSame) {
-                        effectivePromptId = firstRowPromptId
-                    } else {
-                        effectivePromptId = firstRowPromptId
-                    }
-                }
-            }
-
-            // Get base default template (MANDATORY - no fallback)
-            const baseDefaultTemplate = defaultTemplate || publishedTemplates[0]
+            const baseDefaultTemplate = templates.find(t => t.isDefault) || publishedTemplates[0]
 
             if (!baseDefaultTemplate) {
                 toast.error("No default template found. Please create one in Prompt Library.")
@@ -681,92 +778,67 @@ export default function ProjectView({ projectId }) {
                 return
             }
 
-            // Group rows by their promptId for separate translation batches
+            // 3. Group rows by prompt ID
             const rowsByPromptId = {}
             for (const row of rowsToTranslate) {
-                const promptKey = row.promptId || 'default'
-                if (!rowsByPromptId[promptKey]) {
-                    rowsByPromptId[promptKey] = []
-                }
-                rowsByPromptId[promptKey].push(row)
+                const key = row.promptId || selectedPromptId || 'default'
+                if (!rowsByPromptId[key]) rowsByPromptId[key] = []
+                rowsByPromptId[key].push(row)
             }
 
-
-            // Translate each group with its respective prompt
             let totalSuccessCount = 0
+            const ai = getAI()
 
             for (const [promptKey, groupRows] of Object.entries(rowsByPromptId)) {
-                const effectivePromptId = promptKey === 'default' ? null : promptKey
-
-                // Get user-selected template for this group
-                const selectedTemplate = effectivePromptId ? publishedTemplates.find(t => t.id === effectivePromptId) : null
-
-                // Merge prompts: Default base (ALWAYS) + Custom additions (if selected and different)
-                let mergedPrompt = baseDefaultTemplate.prompt || ''
-                let templateName = baseDefaultTemplate.name
-
-                if (selectedTemplate && selectedTemplate.id !== baseDefaultTemplate.id) {
-                    // Custom template - append its instructions to default
-                    mergedPrompt = `${baseDefaultTemplate.prompt}\n\n## Additional Custom Instructions (${selectedTemplate.name})\n${selectedTemplate.prompt}`
-                    templateName = `${baseDefaultTemplate.name} + ${selectedTemplate.name}`
+                // Resolve template for this batch
+                let templateToUse = baseDefaultTemplate
+                if (promptKey !== 'default') {
+                    const found = publishedTemplates.find(t => t.id === promptKey)
+                    if (found) templateToUse = found
                 }
 
-                const templateToUse = {
-                    ...baseDefaultTemplate,
-                    name: templateName,
-                    prompt: mergedPrompt
-                }
+                // Prepare context-aware glossary
+                const simpleGlossary = glossaryTerms.map(t => ({
+                    english: t.en || t.english,
+                    translations: { ms: t.my || t.malay, zh: t.cn || t.zh || t.chinese }
+                }))
 
-
-                // Call translation API for this group - use project's target languages
-                const ai = getAI();
+                // Generate
                 const results = await ai.generateBatch(
-                    groupRows.map(row => ({ id: row.id, text: row.en || row.text || row.source_text || '', context: row.context })),
+                    groupRows.map(row => ({
+                        id: row.id,
+                        text: row.en || row.text || row.source_text || '',
+                        context: row.context
+                    })),
                     {
                         template: templateToUse,
                         targetLanguages: targetLanguages,
-                        glossaryTerms: glossaryTerms.map(t => ({
-                            english: t.en || t.english,
-                            translations: {
-                                ms: t.my || t.malay,
-                                zh: t.cn || t.zh || t.chinese
-                            }
-                        }))
+                        glossaryTerms: simpleGlossary
                     }
                 )
 
-                // Update rows with translations - dynamically handle target languages
+                // Save results
                 for (const result of results) {
-                    if (!result.id) continue; // Skip invalid results
+                    if (!result.id) continue
+                    if (!groupRows.find(r => r.id === result.id) && result.id.startsWith('row_')) continue
 
-                    // Resolve the actual row ID — if result.id is a temp client-side ID,
-                    // find the matching row in our local state by source text
-                    let resolvedRowId = result.id
-                    const matchedRow = groupRows.find(r => r.id === result.id)
-                    if (!matchedRow && result.id.startsWith('row_')) {
-                        // Temp ID not found in current rows — skip to avoid Firebase error
-                        continue
-                    }
-
-                    // Result format: { id, translations: { my: { text, status }, zh: { text, status } } }
                     const updates = {
                         translatedAt: new Date().toISOString(),
-                        translations: result.translations // V2: Save the whole object
+                        translations: result.translations
                     }
 
-                    // V1 Fallback (optional, keep for safety if schema not fully migrated)
+                    // Legacy fallback
                     targetLanguages.forEach(lang => {
-                        const tData = result.translations?.[lang];
-                        if (tData) {
-                            updates[lang] = tData.text; // Legacy Flattening
+                        if (result.translations?.[lang]) {
+                            updates[lang] = result.translations[lang].text
                         }
                     })
 
                     try {
-                        await updateProjectRow(id, resolvedRowId, updates)
+                        await updateProjectRow(id, result.id, updates)
                         totalSuccessCount++
                     } catch (err) {
-                        // Silent fail for individual row update to allow others to proceed
+                        console.error('Row update failed', err)
                     }
                 }
             }
@@ -774,13 +846,7 @@ export default function ProjectView({ projectId }) {
             toast.success(`Successfully translated ${totalSuccessCount} rows!`)
 
         } catch (error) {
-            if (error.message === 'API_NOT_CONFIGURED') {
-                toast.error('AI Translation is currently unavailable')
-            } else if (error.message === 'RATE_LIMIT') {
-                toast.error('Rate limited. Please wait a moment and try again.')
-            } else {
-                toast.error('Translation failed: ' + error.message)
-            }
+            handleTranslationError(error)
         } finally {
             setIsTranslating(false)
             deselectAllRows(id)
@@ -796,7 +862,7 @@ export default function ProjectView({ projectId }) {
         {
             header: "English",
             accessor: "en",
-            width: "220px",
+            width: "22%",
             minWidth: "180px",
             color: 'hsl(220, 9%, 46%)',
             render: row => {
@@ -815,7 +881,7 @@ export default function ProjectView({ projectId }) {
                     )
                 }
                 return (
-                    <div className="whitespace-pre-wrap leading-relaxed">
+                    <div className="whitespace-pre-wrap break-words leading-relaxed">
                         <GlossaryHighlighter
                             text={row.source_text || row.en || row.text || ''}
                             language="en"
@@ -829,7 +895,7 @@ export default function ProjectView({ projectId }) {
         ...targetLanguages.map(langCode => ({
             header: LANGUAGES[langCode]?.label || langCode,
             accessor: langCode,
-            width: langCode === 'my' ? "200px" : "180px",
+            width: "22%",
             minWidth: langCode === 'my' ? "160px" : "140px",
             color: 'hsl(220, 9%, 46%)',
             render: row => {
@@ -850,66 +916,102 @@ export default function ProjectView({ projectId }) {
                 }
                 // Read from translations JSON first, fallback to legacy field
                 const displayText = row.translations?.[langCode]?.text || row[langCode] || ''
+                const translationMeta = row.translations?.[langCode] || {}
+                const hasRejectionRemark = translationMeta.status === 'changes' && translationMeta.remark
                 return (
-                    <div className="whitespace-pre-wrap leading-relaxed">
+                    <div className="whitespace-pre-wrap break-words leading-relaxed">
                         <GlossaryHighlighter
                             text={displayText || '—'}
                             language={langCode}
                             glossaryTerms={glossaryTerms}
                         />
+                        {hasRejectionRemark && (
+                            <div className="text-[11px] text-rose-500 mt-1.5 italic flex items-start gap-1 bg-rose-50 rounded px-1.5 py-1 border border-rose-100">
+                                <span className="shrink-0">💬</span>
+                                <span>{translationMeta.remark}</span>
+                            </div>
+                        )}
                     </div>
                 )
             }
         }))
     ]
 
-    // Check if any row has remarks to decide whether to show the column
-    // Use all rows (not filtered) to keep column structure stable
-    const hasRemarks = rows.some(row => {
-        const remarkText = row.remarks || row.remark || ''
-        return String(remarkText).trim().length > 0
-    })
+
 
     const columns = [
         ...languageColumns,
         {
             header: "Status",
             accessor: "status",
-            width: "140px",
-            minWidth: "140px",
+            width: "120px",
+            minWidth: "120px",
             render: (row) => {
                 const config = getStatusConfig(row.status)
+
+                // Metadata Tooltip
+                let tooltipText = config.label
+                if (row.status === 'approved' && row.approvedBy) {
+                    const approverName = typeof row.approvedBy === 'object'
+                        ? row.approvedBy.name || row.approvedBy.email || 'Unknown'
+                        : usersMap[row.approvedBy] || 'Unknown'
+                    const date = row.approvedAt ? new Date(row.approvedAt).toLocaleDateString() : ''
+                    tooltipText = `Approved by: ${approverName}${date ? ` on ${date}` : ''}`
+                } else if (row.status === 'changes') {
+                    // Gather rejection remarks from all languages
+                    const remarks = Object.entries(row.translations || {})
+                        .filter(([_, t]) => t.remark && t.status === 'changes')
+                        .map(([lang, t]) => `${LANGUAGES[lang]?.label || lang}: ${t.remark}`)
+                    if (remarks.length > 0) {
+                        tooltipText = `Changes requested:\n${remarks.join('\n')}`
+                    }
+                }
+
                 return (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" title={tooltipText}>
                         <span
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: config.color }}
                         />
-                        <span className="font-medium text-muted-foreground">
+                        <span className="font-medium text-muted-foreground cursor-help decoration-dotted underline-offset-4">
                             {config.label}
                         </span>
                     </div>
                 )
             }
         },
-        // Remarks column - only present if hasRemarks
-        ...(hasRemarks ? [{
+        // Remarks column - Always visible
+        {
             header: "Remarks",
             accessor: "remarks",
             width: "200px",
             minWidth: "150px",
             render: (row) => {
-                // Safely convert to string
-                const remarkText = row.remarks ? String(row.remarks) : ''
-                if (!remarkText.trim()) return <span style={{ color: 'hsl(220, 13%, 91%)' }}>—</span>
+                const remarkText = row.remarks || row.remark || ''
+                const hasRemark = !!remarkText.trim()
 
                 return (
-                    <div className="text-muted-foreground italic truncate max-w-[200px]" title={remarkText}>
-                        {remarkText}
+                    <div
+                        className="group relative flex items-center min-h-[24px] cursor-pointer"
+                        onClick={() => handleOpenRemark(row)}
+                    >
+                        {hasRemark ? (
+                            <div className="flex items-center gap-2 max-w-full">
+                                <span className="text-sm text-muted-foreground italic truncate" title={remarkText}>
+                                    {remarkText}
+                                </span>
+                                <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1 text-muted-foreground/50 hover:text-primary transition-colors">
+                                <span className="text-xs opacity-0 group-hover:opacity-100">Add remark</span>
+                                <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                            </div>
+                        )}
                     </div>
                 )
             }
-        }] : []),
+        },
         {
             header: "Template",
             accessor: "promptId",
@@ -918,7 +1020,7 @@ export default function ProjectView({ projectId }) {
             render: (row) => (
                 <PromptCategoryDropdown
                     currentPromptId={row.promptId}
-                    templates={templates}
+                    templates={templates.filter(t => isManager || t.status === 'published' || t.isDefault)}
                     onSelect={(promptId) => {
                         updateProjectRow(id, row.id, { promptId })
                     }}
@@ -984,19 +1086,13 @@ export default function ProjectView({ projectId }) {
 
     return (
         <PageContainer>
-            <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleImportSheet}
-                accept=".xlsx,.xls,.csv,.docx,.pptx"
-                className="hidden"
-            />
+
 
             {/* Page Title - Static */}
             <PageHeader description={project?.description || "Manage your project translations and pages"}>{currentTitle}</PageHeader>
 
             {/* Action Bar */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4 min-h-[80px]">
+            <div className="flex flex-col md:flex-row flex-wrap items-start md:items-center justify-between gap-4 py-4 min-h-[80px]">
                 <span className="text-sm font-medium text-slate-500">
                     {selectedCount > 0 ? `${selectedCount} row(s) selected` : `${rows.length} row(s)`}
                 </span>
@@ -1018,7 +1114,7 @@ export default function ProjectView({ projectId }) {
                         <>
                             <PromptCategoryDropdown
                                 currentPromptId={selectedPromptId}
-                                templates={templates.filter(t => t.status !== 'draft')}
+                                templates={templates.filter(t => isManager || t.status === 'published' || t.isDefault)}
                                 onSelect={setSelectedPromptId}
                             />
                             <StatusFilterDropdown
@@ -1032,7 +1128,7 @@ export default function ProjectView({ projectId }) {
                     {!hasSelection && (
                         <PillButton
                             variant="outline"
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => setIsImportOpen(true)}
                             disabled={isImporting}
                         >
                             <Upload className="w-3.5 h-3.5 mr-2" /> Import
@@ -1133,7 +1229,7 @@ export default function ProjectView({ projectId }) {
                 onToggleSelectAll={handleSelectAll}
                 onRowClick={(row) => toggleRowSelection(project.id, row.id)}
                 scrollable={true}
-                getRowStyle={(row) => isRowNew(id, currentPageId, row) ? { backgroundColor: COLORS.primaryLightest } : {}}
+                getRowStyle={(row) => isRowNew(id, currentPageId, row) ? { animation: 'fadeOutPink 5s forwards' } : {}}
             >
                 {/* Inline Add Row */}
                 {isAddingRow && (
@@ -1232,18 +1328,24 @@ export default function ProjectView({ projectId }) {
             }
 
             {/* Delete Confirmation Dialog */}
-            {/* Delete Confirmation Dialog */}
             <ConfirmDialog
                 open={!!deleteConfirm}
-                onClose={() => setDeleteConfirm(null)}
+                onClose={() => {
+                    const wasBypass = deleteConfirm?.type === 'bypass_approval'
+                    setDeleteConfirm(null)
+                    if (wasBypass) {
+                        setSendForReviewOpen(true)
+                    }
+                }}
                 onConfirm={performDelete}
-                title="Delete Rows?"
-                message={deleteConfirm?.type === 'single'
+                title={deleteConfirm?.title || "Delete Rows?"}
+                message={deleteConfirm?.message || (deleteConfirm?.type === 'single'
                     ? "Are you sure you want to delete this row? This action cannot be undone."
                     : `Are you sure you want to delete ${deleteConfirm?.count || 0} selected rows? This action cannot be undone.`
-                }
-                confirmLabel="Delete"
-                variant="destructive"
+                )}
+                confirmLabel={deleteConfirm?.confirmText || "Delete"}
+                cancelLabel={deleteConfirm?.cancelText || "Cancel"}
+                variant={deleteConfirm?.type === 'bypass_approval' ? 'default' : 'destructive'}
             />
 
             {/* Duplicate Confirmation Dialog */}
@@ -1257,13 +1359,51 @@ export default function ProjectView({ projectId }) {
                 variant="default"
             />
 
+            <ImportFileDialog
+                isOpen={isImportOpen}
+                onClose={() => setIsImportOpen(false)}
+                onImport={handleImportSheet}
+                accept=".xlsx,.xls,.csv"
+                title="Import Translation Rows"
+            />
+
+            {/* Send For Review Dialog */}
             <SendForReviewDialog
                 open={sendForReviewOpen}
                 onOpenChange={setSendForReviewOpen}
+                rows={rowsToSend}
+                managers={managers}
                 onConfirm={handleConfirmSendForReview}
                 targetLanguages={targetLanguages}
-                managers={managers}
             />
+
+            {/* Remark Edit Dialog */}
+            <Dialog open={remarkDialog.open} onOpenChange={(open) => !open && setRemarkDialog(prev => ({ ...prev, open: false }))}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Remark</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea
+                            value={remarkDialog.text}
+                            onChange={(e) => setRemarkDialog(prev => ({ ...prev, text: e.target.value }))}
+                            placeholder="Add a remark for this row..."
+                            className="min-h-[100px]"
+                        />
+                        {remarkDialog.row?.remarkMetadata && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                                Last updated by {remarkDialog.row.remarkMetadata.name} on {new Date(remarkDialog.row.remarkMetadata.updatedAt).toLocaleDateString()}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRemarkDialog(prev => ({ ...prev, open: false }))}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSaveRemark}>Save Remark</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </PageContainer>
     )
 }

@@ -66,11 +66,17 @@ export function GlossaryProvider({ children }) {
                     en: t.en || t.english || t.term || getText(tx.en) || getText(tx.english) || '',
                     my: t.my || t.malay || getText(tx.my) || getText(tx.malay) || '',
                     // Added 'zh' (from constants)
-                    cn: t.cn || t.chinese || getText(tx.cn) || getText(tx.chinese) || getText(tx.zh) || '',
+                    cn: t.cn || t.chinese || t.zh || getText(tx.cn) || getText(tx.chinese) || getText(tx.zh) || '',
                     // Check category and categoryId
                     category: t.category || t.categoryId || 'General',
                     remark: t.remark || t.remarks || '',
-                    status: t.status || 'draft'
+                    status: t.status || 'draft',
+                    // Ensure translations object is populated for AI consumption
+                    translations: {
+                        en: t.en || t.english || t.term || getText(tx.en) || getText(tx.english) || '',
+                        my: t.my || t.malay || getText(tx.my) || getText(tx.malay) || '',
+                        cn: t.cn || t.chinese || t.zh || getText(tx.cn) || getText(tx.chinese) || getText(tx.zh) || ''
+                    }
                 }
             })
 
@@ -114,7 +120,12 @@ export function GlossaryProvider({ children }) {
             cn: term.cn || term.chinese || '',
             category: term.category || 'General',
             remark: term.remark || '',
-            status: term.status || 'draft'
+            status: term.status || 'draft',
+            createdBy: user ? {
+                uid: user.id || user.uid,
+                email: user.email,
+                name: user.displayName || user.name || user.email?.split('@')[0]
+            } : null
         }
 
         try {
@@ -143,7 +154,12 @@ export function GlossaryProvider({ children }) {
             cn: term.cn || '',
             category: term.category || 'General',
             remark: term.remark || '',
-            status: term.status || 'draft'
+            status: term.status || 'draft',
+            createdBy: user ? {
+                uid: user.id || user.uid,
+                email: user.email,
+                name: user.displayName || user.name || user.email?.split('@')[0]
+            } : null
         }))
 
         try {
@@ -170,6 +186,15 @@ export function GlossaryProvider({ children }) {
                 finalUpdates.status = 'draft'
             }
 
+            // Add lastModifiedBy metadata
+            if (user) {
+                finalUpdates.lastModifiedBy = {
+                    uid: user.id || user.uid,
+                    email: user.email,
+                    name: user.displayName || user.name || user.email?.split('@')[0]
+                }
+            }
+
             await dbService.updateGlossaryTerm(id, finalUpdates)
             const updatedTerm = {
                 ...existingTerm,
@@ -184,6 +209,42 @@ export function GlossaryProvider({ children }) {
             })
         } catch (error) {
             toast.error("Failed to update term")
+        }
+    }, [terms, user])
+
+    // Approve a term (Manager only)
+    const approveTerm = useCallback(async (id) => {
+        const existingTerm = terms.find(t => t.id === id)
+        if (!user) return
+
+        try {
+            const approvalData = {
+                status: 'approved',
+                approvedBy: {
+                    uid: user.id || user.uid,
+                    email: user.email,
+                    name: user.displayName || user.name || user.email?.split('@')[0]
+                },
+                approvedAt: new Date().toISOString()
+            }
+
+            await dbService.updateGlossaryTerm(id, approvalData)
+
+            const updatedTerm = {
+                ...existingTerm,
+                ...approvalData
+            }
+
+            setTerms(prev => prev.map(t => t.id === id ? updatedTerm : t))
+
+            // Audit log
+            await logAction(user, AUDIT_ACTIONS.GLOSSARY_APPROVED || 'GLOSSARY_APPROVED', 'glossary', id, {
+                content: { term: existingTerm.en }
+            })
+
+            toast.success("Term approved")
+        } catch (error) {
+            toast.error("Failed to approve term")
         }
     }, [terms, user])
 
@@ -255,6 +316,7 @@ export function GlossaryProvider({ children }) {
         addTerms,
         refreshGlossary,
         updateTerm,
+        approveTerm, // New
         deleteTerm,
         deleteTerms,
         getTerm,

@@ -13,7 +13,8 @@ import {
     orderBy,
     serverTimestamp,
     writeBatch,
-    collectionGroup
+    collectionGroup,
+    increment
 } from 'firebase/firestore';
 
 const COLLECTION = 'projects';
@@ -49,14 +50,18 @@ export async function createProject(projectData) {
     try {
         const docRef = await addDoc(collection(db, COLLECTION), {
             ...projectData,
+            ownerId: projectData.ownerId || null, // Capture owner
+            createdBy: projectData.createdBy || null, // Who created it
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+            version: 1,
             status: projectData.status || 'draft'
         });
         return {
             id: docRef.id,
             ...projectData,
             status: projectData.status || 'draft',
+            version: 1,
             createdAt: new Date().toISOString(), // Optimistic return
             updatedAt: new Date().toISOString()
         };
@@ -71,7 +76,8 @@ export async function updateProject(projectId, updates) {
         const docRef = doc(db, COLLECTION, projectId);
         await updateDoc(docRef, {
             ...updates,
-            updatedAt: serverTimestamp()
+            updatedAt: serverTimestamp(),
+            version: increment(1)
         });
     } catch (error) {
         console.error('Error updating project:', error);
@@ -81,7 +87,53 @@ export async function updateProject(projectId, updates) {
 
 export async function deleteProject(projectId) {
     try {
-        await deleteDoc(doc(db, COLLECTION, projectId));
+        const batch = writeBatch(db);
+        let operationCount = 0;
+        const batches = [batch];
+
+        // Helper to add to batch and commit if full
+        const addToBatch = async (ref) => {
+            batches[batches.length - 1].delete(ref);
+            operationCount++;
+
+            if (operationCount >= 450) { // Safety margin
+                batches.push(writeBatch(db));
+                operationCount = 0;
+            }
+        };
+
+        // 1. Get all pages
+        const pagesRef = collection(db, COLLECTION, projectId, 'pages');
+        const pagesSnapshot = await getDocs(pagesRef);
+
+        // 2. For each page, get its rows and delete them
+        for (const pageDoc of pagesSnapshot.docs) {
+            const pageRowsRef = collection(db, COLLECTION, projectId, 'pages', pageDoc.id, 'rows');
+            const pageRowsSnapshot = await getDocs(pageRowsRef);
+
+            for (const rowDoc of pageRowsSnapshot.docs) {
+                await addToBatch(rowDoc.ref);
+            }
+
+            // Delete the page itself
+            await addToBatch(pageDoc.ref);
+        }
+
+        // 3. Get all legacy/flat rows (direct subcollection of project)
+        const projectRowsRef = collection(db, COLLECTION, projectId, 'rows');
+        const projectRowsSnapshot = await getDocs(projectRowsRef);
+
+        for (const rowDoc of projectRowsSnapshot.docs) {
+            await addToBatch(rowDoc.ref);
+        }
+
+        // 4. Delete the project document itself
+        await addToBatch(doc(db, COLLECTION, projectId));
+
+        // Commit all batches
+        for (const b of batches) {
+            await b.commit();
+        }
     } catch (error) {
         console.error('Error deleting project:', error);
         throw error;
@@ -176,27 +228,35 @@ export async function getPageRows(projectId, pageId) {
 
 export async function addPageRows(projectId, pageId, rows) {
     try {
-        const batch = writeBatch(db);
         const results = [];
+        const CHUNK_SIZE = 400; // Safety margin below 500 limit
 
-        rows.forEach((row, i) => {
-            const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
-            // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
-            const { id: _tempId, ...rowWithoutId } = row;
-            const rowData = {
-                ...rowWithoutId,
-                project: projectId,
-                pageId: pageId,
-                order: i,
-                status: row.status || 'draft',
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            };
-            batch.set(rowRef, rowData);
-            results.push({ ...rowData, id: rowRef.id });
-        });
+        for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rows.slice(i, i + CHUNK_SIZE);
+            const chunkResults = [];
 
-        await batch.commit();
+            chunk.forEach((row, index) => {
+                const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
+                // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
+                const { id: _tempId, ...rowWithoutId } = row;
+                const rowData = {
+                    ...rowWithoutId,
+                    project: projectId,
+                    pageId: pageId,
+                    order: i + index, // Correct global order
+                    status: row.status || 'draft',
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                };
+                batch.set(rowRef, rowData);
+                chunkResults.push({ ...rowData, id: rowRef.id });
+            });
+
+            await batch.commit();
+            results.push(...chunkResults);
+        }
+
         await updateProject(projectId, {});
         return results;
     } catch (error) {
@@ -255,15 +315,23 @@ export async function updateProjectRow(projectId, rowId, updates) {
 
 export async function updateProjectRows(projectId, rowUpdates) {
     try {
-        const batch = writeBatch(db);
-        rowUpdates.forEach(({ id, changes }) => {
-            const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
-            batch.update(rowRef, {
-                ...changes,
-                updatedAt: serverTimestamp()
+        const CHUNK_SIZE = 400;
+
+        for (let i = 0; i < rowUpdates.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowUpdates.slice(i, i + CHUNK_SIZE);
+
+            chunk.forEach(({ id, changes }) => {
+                const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+                batch.update(rowRef, {
+                    ...changes,
+                    updatedAt: serverTimestamp()
+                });
             });
-        });
-        await batch.commit();
+
+            await batch.commit();
+        }
+
         await updateProject(projectId, {});
     } catch (error) {
         console.error('Error updating rows:', error);
@@ -273,12 +341,20 @@ export async function updateProjectRows(projectId, rowUpdates) {
 
 export async function deletePageRows(projectId, pageId, rowIds) {
     try {
-        const batch = writeBatch(db);
-        rowIds.forEach(id => {
-            const rowRef = doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', id);
-            batch.delete(rowRef);
-        });
-        await batch.commit();
+        const CHUNK_SIZE = 400;
+
+        for (let i = 0; i < rowIds.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowIds.slice(i, i + CHUNK_SIZE);
+
+            chunk.forEach(id => {
+                const rowRef = doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', id);
+                batch.delete(rowRef);
+            });
+
+            await batch.commit();
+        }
+
         await updateProject(projectId, {});
     } catch (error) {
         console.error('Error deleting page rows:', error);
@@ -288,12 +364,20 @@ export async function deletePageRows(projectId, pageId, rowIds) {
 
 export async function deleteProjectRows(projectId, rowIds) {
     try {
-        const batch = writeBatch(db);
-        rowIds.forEach(id => {
-            const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
-            batch.delete(rowRef);
-        });
-        await batch.commit();
+        const CHUNK_SIZE = 400;
+
+        for (let i = 0; i < rowIds.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowIds.slice(i, i + CHUNK_SIZE);
+
+            chunk.forEach(id => {
+                const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+                batch.delete(rowRef);
+            });
+
+            await batch.commit();
+        }
+
         await updateProject(projectId, {});
     } catch (error) {
         console.error('Error deleting project rows:', error);

@@ -27,8 +27,10 @@ import { LAYOUT } from "@/lib/constants"
 import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
 import { PageHeader, SearchInput, StatusDot } from "@/components/ui/common"
 import { exportGlossaryToExcel } from "@/lib/export"
+import { handleTranslationError } from "@/lib/utils"
 import * as XLSX from "xlsx"
-import ImportGlossaryDialog from "@/components/dialogs/ImportGlossaryDialog"
+import { ImportFileDialog } from "@/components/dialogs"
+import { parseExcelFile } from "@/lib/excel"
 import { toast } from "sonner"
 import { getAI } from "@/api/ai"
 import Pagination from "@/components/Pagination"
@@ -60,7 +62,6 @@ export default function Glossary() {
     const [isImportOpen, setIsImportOpen] = useState(false)
     const [isTranslating, setIsTranslating] = useState(false)
     const [statusFilter, setStatusFilter] = useState([]) // Multi-selectable status filter
-    const fileInputRef = useRef(null)
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1)
@@ -111,7 +112,6 @@ export default function Glossary() {
 
 
             // Call translation API - use en field for source text
-            // Call translation API - use en field for source text
             const results = await getAI().generateBatch(
                 termsToTranslate.map(term => ({ id: term.id, text: term.en })),
                 {
@@ -122,12 +122,15 @@ export default function Glossary() {
             )
 
             // Update terms with translations - use PocketBase field names
+            // API returns: { id, translations: { my: { text, status }, zh: { text, status } } }
             let successCount = 0
             for (const result of results) {
                 if (result.status !== 'error') {
+                    const myText = result.translations?.my?.text || result.translations?.my || result.my || ''
+                    const zhText = result.translations?.zh?.text || result.translations?.zh || result.zh || ''
                     await updateTerm(result.id, {
-                        my: result.my,
-                        cn: result.zh,
+                        my: myText,
+                        cn: zhText,
                         status: 'draft' // Keep as draft for review
                     })
                     successCount++
@@ -151,7 +154,6 @@ export default function Glossary() {
         }
     }
 
-    // Send for review - change status of terms with complete translations
     // Send for review - change status of terms with complete translations
     const handleSendForReview = async () => {
         let termsToSend = []
@@ -186,12 +188,31 @@ export default function Glossary() {
         }
     }
 
-    const handleImportFromFile = (e) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            setIsImportOpen(true)
-        }
+    // Approve term (Manager only)
+    const handleApproveTerm = async (id) => {
+        await updateTerm(id, { status: 'approved' })
+        toast.success('Term approved!')
     }
+
+    // Approve selected terms (Manager only)
+    const handleApproveSelected = async () => {
+        let successCount = 0
+        for (const id of selectedIds) {
+            const term = terms.find(t => t.id === id)
+            // Only approve if not already approved
+            if (term && term.status !== 'approved' && term.status !== 'published') {
+                await updateTerm(id, { status: 'approved' })
+                successCount++
+            }
+        }
+        if (successCount > 0) {
+            toast.success(`Approved ${successCount} terms`)
+        } else {
+            toast.info("No eligible terms to approve")
+        }
+        setSelectedIds([])
+    }
+
 
     // Filter and sort logic
     const filteredTerms = (terms || [])
@@ -459,6 +480,35 @@ export default function Glossary() {
         return { duplicates: duplicateList, uniqueTerms }
     }
 
+    const handleImportFile = async (file) => {
+        if (!file) return
+
+        try {
+            const parsedData = await parseExcelFile(file)
+            let allTerms = []
+
+            for (const [sheetName, sheetData] of Object.entries(parsedData)) {
+                const terms = sheetData.entries.map(entry => ({
+                    en: entry.english || entry.en || '',
+                    my: entry.malay || entry.my || '',
+                    cn: entry.chinese || entry.zh || entry.cn || '',
+                    category: entry.category || 'General',
+                    status: 'draft',
+                    remark: entry.remark || ''
+                })).filter(term => term.en)
+                allTerms = [...allTerms, ...terms]
+            }
+
+            if (allTerms.length > 0) {
+                await handleImport(allTerms)
+            } else {
+                toast.error("No valid terms found in file")
+            }
+        } catch (error) {
+            handleTranslationError(error)
+        }
+    }
+
     const handleImport = async (newTerms) => {
         try {
             // Check for duplicates
@@ -489,9 +539,9 @@ export default function Glossary() {
             const overridePromises = duplicates
                 .filter(d => overrides.includes(d.existing.id))
                 .map(d => updateTerm(d.existing.id, {
-                    english: d.new.english || d.existing.english,
-                    malay: d.new.malay || d.existing.malay,
-                    chinese: d.new.chinese || d.existing.chinese,
+                    en: d.new.en || d.existing.en,
+                    my: d.new.my || d.existing.my,
+                    cn: d.new.cn || d.existing.cn,
                     category: d.new.category || d.existing.category,
                     remark: d.new.remark || d.existing.remark,
                 }))
@@ -537,7 +587,7 @@ export default function Glossary() {
                     <GlossaryHighlighter
                         text={row.en || ''}
                         language="en"
-                        glossaryTerms={terms.filter(t => t.id !== row.id)}
+                        glossaryTerms={terms.filter(t => t.id !== row.id && (t.status === 'approved' || t.status === 'published'))}
                         hoveredTermId={hoveredTermId}
                         onHover={setHoveredTermId}
                     />
@@ -554,7 +604,7 @@ export default function Glossary() {
                     <GlossaryHighlighter
                         text={row.my || ''}
                         language="my"
-                        glossaryTerms={terms.filter(t => t.id !== row.id)}
+                        glossaryTerms={terms.filter(t => t.id !== row.id && (t.status === 'approved' || t.status === 'published'))}
                         hoveredTermId={hoveredTermId}
                         onHover={setHoveredTermId}
                     />
@@ -571,7 +621,7 @@ export default function Glossary() {
                     <GlossaryHighlighter
                         text={row.cn || ''}
                         language="zh"
-                        glossaryTerms={terms.filter(t => t.id !== row.id)}
+                        glossaryTerms={terms.filter(t => t.id !== row.id && (t.status === 'approved' || t.status === 'published'))}
                         hoveredTermId={hoveredTermId}
                         onHover={setHoveredTermId}
                     />
@@ -683,13 +733,7 @@ export default function Glossary() {
     return (
         <TooltipProvider>
             <PageContainer>
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleImportFromFile}
-                    accept=".xlsx,.xls,.csv,.docx"
-                    className="hidden"
-                />
+
 
                 {/* Page Title */}
                 {/* Page Title */}
@@ -1002,10 +1046,12 @@ export default function Glossary() {
                     />
                 )}
 
-                <ImportGlossaryDialog
-                    open={isImportOpen}
-                    onOpenChange={setIsImportOpen}
-                    onImport={handleImport}
+                <ImportFileDialog
+                    isOpen={isImportOpen}
+                    onClose={() => setIsImportOpen(false)}
+                    onImport={handleImportFile}
+                    title="Import Glossary Terms"
+                    accept=".xlsx,.xls,.csv"
                 />
 
                 <DuplicateGlossaryDialog
