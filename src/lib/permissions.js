@@ -45,6 +45,7 @@ export const ACTIONS = {
     CREATE_GLOSSARY: 'create_glossary',
     EDIT_GLOSSARY: 'edit_glossary',
     DELETE_GLOSSARY: 'delete_glossary',
+    APPROVE_GLOSSARY: 'approve_glossary', // New
 
     // Prompts (All roles)
     CREATE_PROMPT: 'create_prompt',
@@ -88,6 +89,7 @@ const permissions = {
         ACTIONS.CREATE_GLOSSARY,
         ACTIONS.EDIT_GLOSSARY,
         ACTIONS.DELETE_GLOSSARY,
+        ACTIONS.APPROVE_GLOSSARY, // New Action
         // Prompts
         ACTIONS.CREATE_PROMPT,
         ACTIONS.EDIT_PROMPT,
@@ -117,6 +119,14 @@ const permissions = {
         // Translation - WORKER
         ACTIONS.TRANSLATE_ROW,
         ACTIONS.EDIT_TRANSLATION,
+
+        // Glossary - Create/Edit (No Delete)
+        ACTIONS.CREATE_GLOSSARY,
+        ACTIONS.EDIT_GLOSSARY,
+
+        // Prompts - Create/Edit (No Delete)
+        ACTIONS.CREATE_PROMPT,
+        ACTIONS.EDIT_PROMPT,
 
         // Read
         ACTIONS.VIEW_PROJECT,

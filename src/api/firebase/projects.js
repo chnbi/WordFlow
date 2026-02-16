@@ -82,7 +82,53 @@ export async function updateProject(projectId, updates) {
 
 export async function deleteProject(projectId) {
     try {
-        await deleteDoc(doc(db, COLLECTION, projectId));
+        const batch = writeBatch(db);
+        let operationCount = 0;
+        const batches = [batch];
+
+        // Helper to add to batch and commit if full
+        const addToBatch = async (ref) => {
+            batches[batches.length - 1].delete(ref);
+            operationCount++;
+
+            if (operationCount >= 450) { // Safety margin
+                batches.push(writeBatch(db));
+                operationCount = 0;
+            }
+        };
+
+        // 1. Get all pages
+        const pagesRef = collection(db, COLLECTION, projectId, 'pages');
+        const pagesSnapshot = await getDocs(pagesRef);
+
+        // 2. For each page, get its rows and delete them
+        for (const pageDoc of pagesSnapshot.docs) {
+            const pageRowsRef = collection(db, COLLECTION, projectId, 'pages', pageDoc.id, 'rows');
+            const pageRowsSnapshot = await getDocs(pageRowsRef);
+
+            for (const rowDoc of pageRowsSnapshot.docs) {
+                await addToBatch(rowDoc.ref);
+            }
+
+            // Delete the page itself
+            await addToBatch(pageDoc.ref);
+        }
+
+        // 3. Get all legacy/flat rows (direct subcollection of project)
+        const projectRowsRef = collection(db, COLLECTION, projectId, 'rows');
+        const projectRowsSnapshot = await getDocs(projectRowsRef);
+
+        for (const rowDoc of projectRowsSnapshot.docs) {
+            await addToBatch(rowDoc.ref);
+        }
+
+        // 4. Delete the project document itself
+        await addToBatch(doc(db, COLLECTION, projectId));
+
+        // Commit all batches
+        for (const b of batches) {
+            await b.commit();
+        }
     } catch (error) {
         console.error('Error deleting project:', error);
         throw error;
