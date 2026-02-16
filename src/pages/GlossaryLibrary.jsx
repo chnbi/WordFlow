@@ -27,6 +27,7 @@ import { LAYOUT } from "@/lib/constants"
 import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
 import { PageHeader, SearchInput, StatusDot } from "@/components/ui/common"
 import { exportGlossaryToExcel } from "@/lib/export"
+import { handleTranslationError } from "@/lib/utils"
 import * as XLSX from "xlsx"
 import { ImportFileDialog } from "@/components/dialogs"
 import { parseExcelFile } from "@/lib/excel"
@@ -121,12 +122,15 @@ export default function Glossary() {
             )
 
             // Update terms with translations - use PocketBase field names
+            // API returns: { id, translations: { my: { text, status }, zh: { text, status } } }
             let successCount = 0
             for (const result of results) {
                 if (result.status !== 'error') {
+                    const myText = result.translations?.my?.text || result.translations?.my || result.my || ''
+                    const zhText = result.translations?.zh?.text || result.translations?.zh || result.zh || ''
                     await updateTerm(result.id, {
-                        my: result.my,
-                        cn: result.zh,
+                        my: myText,
+                        cn: zhText,
                         status: 'draft' // Keep as draft for review
                     })
                     successCount++
@@ -501,8 +505,7 @@ export default function Glossary() {
                 toast.error("No valid terms found in file")
             }
         } catch (error) {
-            console.error("Import error:", error)
-            toast.error("Failed to parse file")
+            handleTranslationError(error)
         }
     }
 
@@ -536,9 +539,9 @@ export default function Glossary() {
             const overridePromises = duplicates
                 .filter(d => overrides.includes(d.existing.id))
                 .map(d => updateTerm(d.existing.id, {
-                    english: d.new.english || d.existing.english,
-                    malay: d.new.malay || d.existing.malay,
-                    chinese: d.new.chinese || d.existing.chinese,
+                    en: d.new.en || d.existing.en,
+                    my: d.new.my || d.existing.my,
+                    cn: d.new.cn || d.existing.cn,
                     category: d.new.category || d.existing.category,
                     remark: d.new.remark || d.existing.remark,
                 }))

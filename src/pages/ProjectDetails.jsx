@@ -14,6 +14,7 @@ import { useAuth } from "@/context/DevAuthContext"
 import * as XLSX from "xlsx"
 import { parseExcelFile } from "@/lib/excel"
 import { exportToDocx, exportToPptx } from "@/lib/document"
+import { cn, handleTranslationError } from "@/lib/utils"
 import { getAI } from "@/api/ai"
 import { toast } from "sonner"
 import { DataTable, TABLE_STYLES } from "@/components/ui/DataTable"
@@ -739,60 +740,37 @@ export default function ProjectView({ projectId }) {
     const handleTranslateAll = async () => {
         setIsTranslating(true)
         try {
-            // Determine which rows to translate
+            // 1. Identify rows to translate
             let rowsToTranslate
-            const hasSelection = selectedCount > 0
+            let mode
+            const hasSelection = selectedRowIds && selectedRowIds.size > 0
 
             if (hasSelection) {
                 // Selected rows - override existing translations
                 rowsToTranslate = rows.filter(row => selectedRowIds.has(row.id))
-                toast.info(`Translating ${rowsToTranslate.length} selected rows...`)
+                mode = 'selection'
             } else {
-                // No selection - translate only rows with at least one empty target language
+                // No selection - only translate rows with empty translations
                 rowsToTranslate = rows.filter(row => {
                     return targetLanguages.some(lang => {
-                        const v2Text = row.translations?.[lang]?.text
-                        const legacyText = row[lang]
-                        const text = v2Text || legacyText || ''
+                        const text = row.translations?.[lang]?.text || row[lang] || ''
                         return !text.trim()
                     })
                 })
-                if (rowsToTranslate.length === 0) {
-                    toast.info('All rows already have translations!')
-                    setIsTranslating(false)
-                    return
-                }
-                toast.info(`Translating ${rowsToTranslate.length} empty rows...`)
+                mode = 'empty'
             }
 
-            // Get templates - published templates + always include default (even if draft)
-            const defaultTemplate = templates.find(t => t.isDefault)
+            if (rowsToTranslate.length === 0) {
+                toast.info(mode === 'selection' ? 'No rows selected' : 'All rows already have translations!')
+                setIsTranslating(false)
+                return
+            }
+
+            toast.info(`Translating ${rowsToTranslate.length} rows (${mode === 'selection' ? 'Selected' : 'Empty'})...`)
+
+            // 2. Prepare templates
             const publishedTemplates = templates.filter(t => t.status !== 'draft' || t.isDefault)
-
-            // Determine which prompt to use:
-            // 1. If selected rows have a promptId set, use that (per-row selection)
-            // 2. Otherwise use Action Bar dropdown selection
-            // 3. Fallback to default template
-            let effectivePromptId = selectedPromptId
-
-            // Check if selected rows have a specific promptId assigned
-            if (hasSelection && rowsToTranslate.length > 0) {
-                const rowPromptIds = rowsToTranslate.map(r => r.promptId).filter(Boolean)
-                if (rowPromptIds.length > 0) {
-                    // Use the first row's promptId (all selected rows should ideally have the same)
-                    const firstRowPromptId = rowPromptIds[0]
-                    // Check if all selected rows have the same promptId
-                    const allSame = rowPromptIds.every(id => id === firstRowPromptId)
-                    if (allSame) {
-                        effectivePromptId = firstRowPromptId
-                    } else {
-                        effectivePromptId = firstRowPromptId
-                    }
-                }
-            }
-
-            // Get base default template (MANDATORY - no fallback)
-            const baseDefaultTemplate = defaultTemplate || publishedTemplates[0]
+            const baseDefaultTemplate = templates.find(t => t.isDefault) || publishedTemplates[0]
 
             if (!baseDefaultTemplate) {
                 toast.error("No default template found. Please create one in Prompt Library.")
@@ -800,92 +778,67 @@ export default function ProjectView({ projectId }) {
                 return
             }
 
-            // Group rows by their promptId for separate translation batches
+            // 3. Group rows by prompt ID
             const rowsByPromptId = {}
             for (const row of rowsToTranslate) {
-                const promptKey = row.promptId || selectedPromptId || 'default'
-                if (!rowsByPromptId[promptKey]) {
-                    rowsByPromptId[promptKey] = []
-                }
-                rowsByPromptId[promptKey].push(row)
+                const key = row.promptId || selectedPromptId || 'default'
+                if (!rowsByPromptId[key]) rowsByPromptId[key] = []
+                rowsByPromptId[key].push(row)
             }
 
-
-            // Translate each group with its respective prompt
             let totalSuccessCount = 0
+            const ai = getAI()
 
             for (const [promptKey, groupRows] of Object.entries(rowsByPromptId)) {
-                const effectivePromptId = promptKey === 'default' ? null : promptKey
-
-                // Get user-selected template for this group
-                const selectedTemplate = effectivePromptId ? publishedTemplates.find(t => t.id === effectivePromptId) : null
-
-                // Merge prompts: Default base (ALWAYS) + Custom additions (if selected and different)
-                let mergedPrompt = baseDefaultTemplate.prompt || ''
-                let templateName = baseDefaultTemplate.name
-
-                if (selectedTemplate && selectedTemplate.id !== baseDefaultTemplate.id) {
-                    // Custom template - append its instructions to default
-                    mergedPrompt = `${baseDefaultTemplate.prompt}\n\n## Additional Custom Instructions (${selectedTemplate.name})\n${selectedTemplate.prompt}`
-                    templateName = `${baseDefaultTemplate.name} + ${selectedTemplate.name}`
+                // Resolve template for this batch
+                let templateToUse = baseDefaultTemplate
+                if (promptKey !== 'default') {
+                    const found = publishedTemplates.find(t => t.id === promptKey)
+                    if (found) templateToUse = found
                 }
 
-                const templateToUse = {
-                    ...baseDefaultTemplate,
-                    name: templateName,
-                    prompt: mergedPrompt
-                }
+                // Prepare context-aware glossary
+                const simpleGlossary = glossaryTerms.map(t => ({
+                    english: t.en || t.english,
+                    translations: { ms: t.my || t.malay, zh: t.cn || t.zh || t.chinese }
+                }))
 
-
-                // Call translation API for this group - use project's target languages
-                const ai = getAI();
+                // Generate
                 const results = await ai.generateBatch(
-                    groupRows.map(row => ({ id: row.id, text: row.en || row.text || row.source_text || '', context: row.context })),
+                    groupRows.map(row => ({
+                        id: row.id,
+                        text: row.en || row.text || row.source_text || '',
+                        context: row.context
+                    })),
                     {
                         template: templateToUse,
                         targetLanguages: targetLanguages,
-                        glossaryTerms: glossaryTerms.map(t => ({
-                            english: t.en || t.english,
-                            translations: {
-                                ms: t.my || t.malay,
-                                zh: t.cn || t.zh || t.chinese
-                            }
-                        }))
+                        glossaryTerms: simpleGlossary
                     }
                 )
 
-                // Update rows with translations - dynamically handle target languages
+                // Save results
                 for (const result of results) {
-                    if (!result.id) continue; // Skip invalid results
+                    if (!result.id) continue
+                    if (!groupRows.find(r => r.id === result.id) && result.id.startsWith('row_')) continue
 
-                    // Resolve the actual row ID — if result.id is a temp client-side ID,
-                    // find the matching row in our local state by source text
-                    let resolvedRowId = result.id
-                    const matchedRow = groupRows.find(r => r.id === result.id)
-                    if (!matchedRow && result.id.startsWith('row_')) {
-                        // Temp ID not found in current rows — skip to avoid Firebase error
-                        continue
-                    }
-
-                    // Result format: { id, translations: { my: { text, status }, zh: { text, status } } }
                     const updates = {
                         translatedAt: new Date().toISOString(),
-                        translations: result.translations // V2: Save the whole object
+                        translations: result.translations
                     }
 
-                    // V1 Fallback (optional, keep for safety if schema not fully migrated)
+                    // Legacy fallback
                     targetLanguages.forEach(lang => {
-                        const tData = result.translations?.[lang];
-                        if (tData) {
-                            updates[lang] = tData.text; // Legacy Flattening
+                        if (result.translations?.[lang]) {
+                            updates[lang] = result.translations[lang].text
                         }
                     })
 
                     try {
-                        await updateProjectRow(id, resolvedRowId, updates)
+                        await updateProjectRow(id, result.id, updates)
                         totalSuccessCount++
                     } catch (err) {
-                        // Silent fail for individual row update to allow others to proceed
+                        console.error('Row update failed', err)
                     }
                 }
             }
@@ -893,13 +846,7 @@ export default function ProjectView({ projectId }) {
             toast.success(`Successfully translated ${totalSuccessCount} rows!`)
 
         } catch (error) {
-            if (error.message === 'API_NOT_CONFIGURED') {
-                toast.error('AI Translation is currently unavailable')
-            } else if (error.message === 'RATE_LIMIT') {
-                toast.error('Rate limited. Please wait a moment and try again.')
-            } else {
-                toast.error('Translation failed: ' + error.message)
-            }
+            handleTranslationError(error)
         } finally {
             setIsTranslating(false)
             deselectAllRows(id)
