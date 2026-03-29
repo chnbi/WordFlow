@@ -139,7 +139,22 @@ export async function deleteProject(projectId) {
             await addToBatch(rowDoc.ref);
         }
 
-        // 4. Delete the project document itself
+        // 4. Cascade delete associated Audit Logs
+        // An audit log might reference the project via projectId or entityId
+        const auditRef = collection(db, 'audit_logs');
+        const auditByProjectId = await getDocs(query(auditRef, where('projectId', '==', projectId)));
+        const auditByEntityId = await getDocs(query(auditRef, where('entityId', '==', projectId)));
+
+        const auditLogRefs = new Map();
+        [...auditByProjectId.docs, ...auditByEntityId.docs].forEach(doc => {
+            auditLogRefs.set(doc.id, doc.ref);
+        });
+
+        for (const ref of auditLogRefs.values()) {
+            await addToBatch(ref);
+        }
+
+        // 5. Delete the project document itself
         await addToBatch(doc(db, COLLECTION, projectId));
 
         // Commit all batches
@@ -413,11 +428,12 @@ export async function getUserSubmissions(userId) {
     try {
         const rowsQuery = query(
             collectionGroup(db, 'rows'),
-            where('status', 'in', ['review', 'approved', 'changes']),
-            orderBy('updatedAt', 'desc')
+            where('submittedBy.uid', '==', userId),
+            where('status', 'in', ['review', 'approved', 'changes'])
         );
 
         const querySnapshot = await getDocs(rowsQuery);
+        // Sort client-side to avoid needing a custom composite index in Firestore
         const submissions = [];
 
         // We need to fetch project and page details manually since Firestore 
@@ -478,6 +494,9 @@ export async function getUserSubmissions(userId) {
 
             submissions.push(rowData);
         }
+
+        // Sort descending by updatedAt
+        submissions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
         return submissions;
     } catch (error) {

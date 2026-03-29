@@ -80,7 +80,7 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
             if (error.message === 'RATE_LIMIT' && retryCount < MAX_RETRIES) {
                 const backoffMs = BASE_BACKOFF_MS * Math.pow(2, retryCount)
                 await new Promise(resolve => setTimeout(resolve, backoffMs))
-                return performTranslation(rows, template, retryCount + 1)
+                return performTranslation(rows, template, targetLanguages, retryCount + 1)
             }
 
             toast.error("Translation failed: " + (error.message || "Unknown error"))

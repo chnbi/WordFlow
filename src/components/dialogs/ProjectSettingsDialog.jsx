@@ -1,12 +1,13 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { LANGUAGES } from "@/lib/constants"
 import { useProjects } from "@/context/ProjectContext"
 import { toast } from "sonner"
-import { Globe } from "lucide-react"
+import { Globe, Type } from "lucide-react"
 
 // Derive available targets from registry (exclude en)
 const AVAILABLE_TARGETS = Object.values(LANGUAGES).filter(l => l.code !== 'en')
@@ -15,10 +16,17 @@ export function ProjectSettingsDialog({ open, onOpenChange, project }) {
     const { updateProject } = useProjects()
     const [isLoading, setIsLoading] = useState(false)
 
-    // Initialize with project's languages or defaults
-    const [selectedLanguages, setSelectedLanguages] = useState(
-        project?.targetLanguages || ['my', 'zh']
-    )
+    // Form state
+    const [projectName, setProjectName] = useState("")
+    const [selectedLanguages, setSelectedLanguages] = useState([])
+
+    // Sync from project when it loads or changes
+    useEffect(() => {
+        if (project) {
+            setProjectName(project.name || "")
+            setSelectedLanguages(project.targetLanguages || ['my', 'zh'])
+        }
+    }, [project])
 
     const handleToggleLanguage = (langCode) => {
         setSelectedLanguages(prev => {
@@ -31,14 +39,19 @@ export function ProjectSettingsDialog({ open, onOpenChange, project }) {
     }
 
     const handleSave = async () => {
+        if (!projectName.trim()) {
+            toast.error("Project name cannot be empty")
+            return
+        }
         if (selectedLanguages.length === 0) {
-            toast.error("Please select at least one language")
+            toast.error("Please select at least one target language")
             return
         }
 
         setIsLoading(true)
         try {
             await updateProject(project.id, {
+                name: projectName.trim(),
                 targetLanguages: selectedLanguages
             })
             toast.success("Project settings updated")
@@ -60,8 +73,26 @@ export function ProjectSettingsDialog({ open, onOpenChange, project }) {
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="py-6">
-                    <h3 className="text-sm font-medium mb-3 text-slate-900">Target Languages</h3>
+                <div className="py-2 space-y-6">
+                    {/* Project Name */}
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                            <Type className="w-4 h-4 text-slate-500" />
+                            Project Name
+                        </h3>
+                        <Input 
+                            value={projectName}
+                            onChange={(e) => setProjectName(e.target.value)}
+                            placeholder="e.g., Q1 Marketing Campaign"
+                        />
+                    </div>
+
+                    {/* Target Languages */}
+                    <div>
+                        <h3 className="text-sm font-medium mb-3 text-slate-900 flex items-center gap-2">
+                            <Globe className="w-4 h-4 text-slate-500" />
+                            Target Languages
+                        </h3>
                     <p className="text-xs text-slate-500 mb-4">
                         Select languages to translate into. Unchecking a language will hide its column but preserve the data.
                     </p>

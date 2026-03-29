@@ -69,6 +69,27 @@ export default function Approvals() {
                 // Determine target languages for this project to check columns
                 const targetLangs = project.targetLanguages || ['my', 'zh'] // default fallback
 
+                // Helper to check if row has ANY pending job for THIS manager
+                const isRelevantToManager = (normalizedRow) => {
+                    if (role === 'admin') return true;
+                    if (!user || (!user.languages || user.languages.length === 0)) return false;
+
+                    // A row is relevant if ANY language meets the criteria
+                    return targetLangs.some(lang => {
+                        // Manager must speak this language
+                        if (!user.languages.includes(lang)) return false;
+                        
+                        const t = normalizedRow.translations[lang];
+                        if (!t) return false;
+                        if (t.status !== 'review') return false;
+                        
+                        // If it's explicitly assigned to someone else, it's not for this manager
+                        if (t.assignedManagerId && t.assignedManagerId !== user.id) return false;
+
+                        return true;
+                    });
+                };
+
                 // Helper to normalize row for UI
                 const normalizeRow = (row, pageId, pageName) => {
                     // Start with base row
@@ -106,14 +127,22 @@ export default function Approvals() {
                     for (const page of pages) {
                         const rows = getPageRows(project.id, page.id) || []
                         const reviewRows = rows.filter(row => row.status === 'review')
+                        
+                        const processedRows = reviewRows
+                            .map(r => normalizeRow(r, page.id, page.name || 'Sheet 1'))
+                            .filter(isRelevantToManager);
 
-                        allReviewRows.push(...reviewRows.map(r => normalizeRow(r, page.id, page.name || 'Sheet 1')))
+                        allReviewRows.push(...processedRows)
                     }
                 } else {
                     const legacyRows = getProjectRows(project.id) || []
                     const reviewRows = legacyRows.filter(row => row.status === 'review')
 
-                    allReviewRows.push(...reviewRows.map(r => normalizeRow(r, null, '—')))
+                    const processedRows = reviewRows
+                        .map(r => normalizeRow(r, null, '—'))
+                        .filter(isRelevantToManager);
+
+                    allReviewRows.push(...processedRows)
                 }
             }
 
