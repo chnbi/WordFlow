@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { deleteUser } from "@/api/firebase"
 import EditManagerDialog from "@/components/dialogs/EditManagerDialog"
+import NewUserDialog from "@/components/dialogs/NewUserDialog"
 
 export default function UsersPage() {
     const { user: currentUser, isManager } = useAuth()
@@ -39,6 +40,9 @@ export default function UsersPage() {
     // Edit Manager Dialog
     const [editingManager, setEditingManager] = useState(null)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+
+    // New User Dialog
+    const [isNewUserOpen, setIsNewUserOpen] = useState(false)
 
     // Delete User State
     const [deleteUserId, setDeleteUserId] = useState(null)
@@ -236,7 +240,10 @@ export default function UsersPage() {
                         <Filter className="w-4 h-4" />
                         Filter
                     </Button>
-                    <Button className="gap-2 h-9 rounded-full px-4 bg-primary text-white hover:bg-primary/90 shadow-sm transition-all active:scale-95">
+                    <Button
+                        className="gap-2 h-9 rounded-full px-4 bg-primary text-white hover:bg-primary/90 shadow-sm transition-all active:scale-95"
+                        onClick={() => setIsNewUserOpen(true)}
+                    >
                         <Plus className="w-4 h-4" />
                         New user
                     </Button>
@@ -275,6 +282,12 @@ export default function UsersPage() {
                 onSuccess={() => {
                     fetchUsers() // Refresh list to show new languages
                 }}
+            />
+
+            <NewUserDialog
+                open={isNewUserOpen}
+                onOpenChange={setIsNewUserOpen}
+                onSuccess={fetchUsers}
             />
 
             <ConfirmDialog

@@ -14,7 +14,8 @@ import {
     serverTimestamp,
     writeBatch,
     collectionGroup,
-    increment
+    increment,
+    onSnapshot
 } from 'firebase/firestore';
 
 const COLLECTION = 'projects';
@@ -32,6 +33,17 @@ export async function getProjects() {
         console.error('Error fetching projects:', error);
         return [];
     }
+}
+
+export function subscribeToProjects(callback) {
+    const q = query(collection(db, COLLECTION), orderBy('updatedAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+        const projects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(projects);
+    }, (error) => {
+        console.error('Error subscribing to projects:', error);
+        callback([]);
+    });
 }
 
 export async function getProject(projectId) {
@@ -181,13 +193,20 @@ export async function deleteProjectPage(projectId, pageId) {
         // Delete page doc 
         // Note: Subcollections (rows) are NOT automatically deleted in Firestore client SDK.
         // We manually delete rows associated with this page.
-        const rows = await getPageRows(projectId, pageId);
-        const batch = writeBatch(db);
-        rows.forEach(row => {
-            const rowRef = doc(db, COLLECTION, projectId, 'rows', row.id);
-            batch.delete(rowRef);
-        });
-        await batch.commit();
+        const rowsRef = collection(db, COLLECTION, projectId, 'pages', pageId, 'rows');
+        const rowsSnapshot = await getDocs(rowsRef);
+
+        const CHUNK_SIZE = 400;
+        const rowDocs = rowsSnapshot.docs;
+
+        for (let i = 0; i < rowDocs.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = rowDocs.slice(i, i + CHUNK_SIZE);
+            chunk.forEach(rowDoc => {
+                batch.delete(rowDoc.ref);
+            });
+            await batch.commit();
+        }
 
         await deleteDoc(doc(db, COLLECTION, projectId, 'pages', pageId));
     } catch (error) {
@@ -214,8 +233,7 @@ export async function renameProjectPage(projectId, pageId, newName) {
 export async function getPageRows(projectId, pageId) {
     try {
         const q = query(
-            collection(db, COLLECTION, projectId, 'rows'),
-            where('pageId', '==', pageId),
+            collection(db, COLLECTION, projectId, 'pages', pageId, 'rows'),
             orderBy('order', 'asc')
         );
         const snapshot = await getDocs(q);
@@ -237,7 +255,9 @@ export async function addPageRows(projectId, pageId, rows) {
             const chunkResults = [];
 
             chunk.forEach((row, index) => {
-                const rowRef = doc(collection(db, COLLECTION, projectId, 'rows'));
+                const rowRef = pageId
+                    ? doc(collection(db, COLLECTION, projectId, 'pages', pageId, 'rows'))
+                    : doc(collection(db, COLLECTION, projectId, 'rows'));
                 // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
                 const { id: _tempId, ...rowWithoutId } = row;
                 const rowData = {
@@ -267,7 +287,7 @@ export async function addPageRows(projectId, pageId, rows) {
 
 export async function updatePageRow(projectId, pageId, rowId, updates) {
     try {
-        const rowRef = doc(db, COLLECTION, projectId, 'rows', rowId);
+        const rowRef = doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', rowId);
         await updateDoc(rowRef, {
             ...updates,
             updatedAt: serverTimestamp()

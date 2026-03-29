@@ -21,7 +21,8 @@ export {
     updateProjectRows,
     deletePageRows,
     deleteProjectRows,
-    getUserSubmissions
+    getUserSubmissions,
+    subscribeToProjects
 } from './projects';
 
 // Template operations

@@ -62,6 +62,11 @@ service cloud.firestore {
         // Only the user themselves can read/write their own settings
         allow read, write: if isAuth() && request.auth.uid == userId;
       }
+
+      // User's API keys (stored at users/{uid}/apiKeys/keys)
+      match /apiKeys/{keyId} {
+        allow read, write: if isAuth() && request.auth.uid == userId;
+      }
     }
 
     // ============================================================
@@ -72,9 +77,10 @@ service cloud.firestore {
       // All authenticated users can read projects
       allow read: if isAuth();
 
-      // Only managers+ can create, update, or delete projects
+      // Only managers+ can create or delete projects
+      // Any authenticated user can update (Editors need to touch lastUpdated when editing rows)
       allow create: if isManagerOrAbove();
-      allow update: if isManagerOrAbove();
+      allow update: if isAuth();
       allow delete: if isManagerOrAbove();
 
       // Project Rows (sub-collection)
@@ -98,7 +104,24 @@ service cloud.firestore {
         allow create: if isManagerOrAbove();
         allow update: if isManagerOrAbove();
         allow delete: if isManagerOrAbove();
+
+        // Page Rows (nested sub-collection under pages)
+        match /rows/{rowId} {
+          allow read: if isAuth();
+          allow create: if isAuth();
+          allow update: if isAuth() && (!isApprovingStatus() || isManagerOrAbove());
+          allow delete: if isManagerOrAbove();
+        }
       }
+    }
+
+    // ============================================================
+    // Collection Group Queries (for cross-collection reads)
+    // Required for collectionGroup('rows') used by Submissions page
+    // ============================================================
+
+    match /{path=**}/rows/{rowId} {
+      allow read: if isAuth();
     }
 
     // ============================================================

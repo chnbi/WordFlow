@@ -45,10 +45,11 @@ export function useProjectData() {
         setIsLoading(true)
         setDataSource('loading')
 
-        async function loadData() {
+        async function loadData(firestoreProjects) {
             try {
-                // Loading projects
-                const firestoreProjects = await dbService.getProjects()
+                if (!firestoreProjects) {
+                     firestoreProjects = await dbService.getProjects()
+                }
 
                 if (firestoreProjects.length === 0) {
                     // No projects
@@ -135,15 +136,33 @@ export function useProjectData() {
             }
         }
 
-        loadData()
+        // Tracks if we've done the initial heavy row load
+        let initialLoadDone = false;
 
-        // Poll for updates every 30 seconds (Auto-refresh)
-        const intervalId = setInterval(() => {
-            // Auto-refresh polling
-            loadData()
-        }, 30000)
+        // Subscribe to projects to get real-time metadata updates.
+        const unsubscribe = dbService.subscribeToProjects(async (firestoreProjects) => {
+            if (!initialLoadDone) {
+                // First time load: fetch all rows and pages
+                await loadData(firestoreProjects)
+                initialLoadDone = true;
+            } else {
+                // Subsequent real-time update: ONLY update projects state, preserve optimistic row states!
+                setProjects(prevProjects => {
+                    return firestoreProjects.map(fp => {
+                        const prev = prevProjects.find(p => p.id === fp.id)
+                        return {
+                            ...fp,
+                            progress: prev ? prev.progress : 0,  // Preserve computed stats locally
+                            status: prev ? prev.status : fp.status
+                        }
+                    })
+                })
+            }
+        })
 
-        return () => clearInterval(intervalId)
+        return () => {
+            unsubscribe()
+        }
     }, [user])
 
     // Get a project by ID
