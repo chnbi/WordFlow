@@ -93,26 +93,27 @@ export function ProjectSettingsDialog({ open, onOpenChange, project }) {
                             <Globe className="w-4 h-4 text-slate-500" />
                             Target Languages
                         </h3>
-                    <p className="text-xs text-slate-500 mb-4">
-                        Select languages to translate into. Unchecking a language will hide its column but preserve the data.
-                    </p>
+                        <p className="text-xs text-slate-500 mb-4">
+                            Select languages to translate into. Unchecking a language will hide its column but preserve the data.
+                        </p>
 
-                    <div className="space-y-3">
-                        {AVAILABLE_TARGETS.map((lang) => (
-                            <div key={lang.code} className="flex items-center space-x-2">
-                                <Checkbox
-                                    id={`lang-${lang.code}`}
-                                    checked={selectedLanguages.includes(lang.code)}
-                                    onCheckedChange={() => handleToggleLanguage(lang.code)}
-                                />
-                                <Label
-                                    htmlFor={`lang-${lang.code}`}
-                                    className="text-sm font-normal cursor-pointer select-none"
-                                >
-                                    {lang.label} <span className="text-slate-400">({lang.nativeLabel})</span>
-                                </Label>
-                            </div>
-                        ))}
+                        <div className="space-y-3">
+                            {AVAILABLE_TARGETS.map((lang) => (
+                                <div key={lang.code} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`lang-${lang.code}`}
+                                        checked={selectedLanguages.includes(lang.code)}
+                                        onCheckedChange={() => handleToggleLanguage(lang.code)}
+                                    />
+                                    <Label
+                                        htmlFor={`lang-${lang.code}`}
+                                        className="text-sm font-normal cursor-pointer select-none"
+                                    >
+                                        {lang.label} <span className="text-slate-400">({lang.nativeLabel})</span>
+                                    </Label>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
