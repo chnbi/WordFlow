@@ -545,7 +545,17 @@ export default function ProjectView({ projectId }) {
     // Edit Row Handlers
     const startEditing = (row) => {
         setEditingRowId(row.id)
-        setEditingRowData({ ...row })
+        
+        // Ensure flat fields exist for the edit state
+        const flatData = { ...row }
+        flatData.en = row.en || row.text || row.source_text || ''
+        targetLanguages.forEach(lang => {
+            if (!flatData[lang]) {
+                flatData[lang] = row.translations?.[lang]?.text || ''
+            }
+        })
+        
+        setEditingRowData(flatData)
     }
 
     const handleStartEdit = (row) => {

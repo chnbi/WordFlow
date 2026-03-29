@@ -8,7 +8,7 @@ import {
     signOut as firebaseSignOut
 } from 'firebase/auth';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth, secondaryAuth, db } from '../lib/firebase';
 import { getUser } from '../api/firebase/roles'; // For fetching user role from Firestore
 import { ROLES, canDo as checkPermission, getRoleLabel, getRoleColor } from '../lib/permissions';
 
@@ -106,8 +106,12 @@ export function AuthProvider({ children }) {
 
     const signUp = async (email, password, userData) => {
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            // Fix B-045: Use secondaryAuth to create the user so the current admin/manager session isn't signed out
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
             const user = userCredential.user;
+            
+            // Immediately sign out from secondary Auth to keep it clean
+            await firebaseSignOut(secondaryAuth);
 
             // Create user profile in Firestore
             await setDoc(doc(db, 'users', user.uid), {

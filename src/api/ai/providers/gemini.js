@@ -217,6 +217,10 @@ ${JSON.stringify(items.map(i => ({ id: i.id, text: i.text, context: i.context })
 ## Output
 Return JSON array with structure:
 [{ "id": "val", "translations": { "lang_code": { "text": "..." } } }]
+
+## Rules
+- Preserve the original text casing. Do NOT convert text to ALL UPPERCASE unless the source text itself is all uppercase.
+- Return ONLY valid JSON (no markdown fences, no extra commentary).
 `;
     }
 

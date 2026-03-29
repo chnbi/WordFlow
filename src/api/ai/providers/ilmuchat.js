@@ -188,7 +188,8 @@ Return ONLY a valid JSON array with this exact structure:
 
 Rules:
 - Return ONLY valid JSON (no markdown, no extra text)
-- Include ALL target languages in each translation object`;
+- Include ALL target languages in each translation object
+- Preserve the original text casing. Do NOT convert text to ALL UPPERCASE unless the source text itself is all uppercase.`;
     }
 
     _buildUserPrompt(items, targetLanguages) {

@@ -135,9 +135,9 @@ function TopBar({ breadcrumbs }) {
 
             <ConfirmDialog
                 open={isLogoutDialogOpen}
-                onOpenChange={setIsLogoutDialogOpen}
+                onClose={() => setIsLogoutDialogOpen(false)}
                 title="Log Out"
-                description="Are you sure you want to log out of your account?"
+                message="Are you sure you want to log out of your account?"
                 onConfirm={handleConfirmLogout}
                 confirmLabel="Log Out"
                 variant="destructive"
