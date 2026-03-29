@@ -339,8 +339,17 @@ export async function addProjectRows(projectId, rows) {
     return addPageRows(projectId, '', rows);
 }
 
-export async function updateProjectRow(projectId, rowId, updates) {
-    const rowRef = doc(db, COLLECTION, projectId, 'rows', rowId);
+/**
+ * Update a single row. 
+ * @param {string} projectId
+ * @param {string} pageId - The page the row belongs to. Pass null/'' for legacy flat rows.
+ * @param {string} rowId
+ * @param {object} updates
+ */
+export async function updateProjectRow(projectId, pageId, rowId, updates) {
+    const rowRef = pageId
+        ? doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', rowId)
+        : doc(db, COLLECTION, projectId, 'rows', rowId);
     await updateDoc(rowRef, {
         ...updates,
         updatedAt: serverTimestamp()
@@ -348,6 +357,11 @@ export async function updateProjectRow(projectId, rowId, updates) {
     await updateProject(projectId, {});
 }
 
+/**
+ * Update multiple rows. Each entry must include { id, pageId, changes }.
+ * pageId is required to route to the correct Firestore subcollection path.
+ * Pass an empty string or null pageId for legacy flat-structure rows.
+ */
 export async function updateProjectRows(projectId, rowUpdates) {
     try {
         const CHUNK_SIZE = 400;
@@ -356,8 +370,11 @@ export async function updateProjectRows(projectId, rowUpdates) {
             const batch = writeBatch(db);
             const chunk = rowUpdates.slice(i, i + CHUNK_SIZE);
 
-            chunk.forEach(({ id, changes }) => {
-                const rowRef = doc(db, COLLECTION, projectId, 'rows', id);
+            chunk.forEach(({ id, pageId, changes }) => {
+                // Route to the correct path based on whether the row has a pageId
+                const rowRef = pageId
+                    ? doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', id)
+                    : doc(db, COLLECTION, projectId, 'rows', id);
                 batch.update(rowRef, {
                     ...changes,
                     updatedAt: serverTimestamp()

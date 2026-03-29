@@ -319,17 +319,10 @@ export function useProjectData() {
             })
         }
 
-        // Sync to Firestore - use the pageId we already determined
+        // Sync to Firestore - pass pageId so it routes to the correct subcollection path
         if (dataSource === 'firestore') {
-            if (pageIdForRow) {
-                // Row is in a page - use page-specific update
-                // Update page row
-                await dbService.updatePageRow(projectId, pageIdForRow, rowId, updates)
-            } else {
-                // Row is in legacy flat structure
-                // Update legacy row
-                await dbService.updateProjectRow(projectId, rowId, updates)
-            }
+            // Use unified updateProjectRow which accepts pageId (null for legacy flat rows)
+            await dbService.updateProjectRow(projectId, pageIdForRow || null, rowId, updates)
         }
     }, [dataSource, projectPages, projects, user, role, updateProject])
 
@@ -361,7 +354,21 @@ export function useProjectData() {
             }
             changes.lastModifiedAt = new Date().toISOString()
 
-            return { ...u, changes }
+            return { 
+                ...u, 
+                changes,
+                // Carry the row's pageId so Firestore can route to the correct nested path.
+                // We look it up from in-memory state; falls back to null for legacy flat rows.
+                pageId: (() => {
+                    const projectData = projectPages[projectId]
+                    if (projectData?.pageRows) {
+                        for (const pid in projectData.pageRows) {
+                            if ((projectData.pageRows[pid] || []).some(r => r.id === u.id)) return pid
+                        }
+                    }
+                    return null
+                })()
+            }
         })
 
         // Check for auto-approval toast
@@ -412,7 +419,7 @@ export function useProjectData() {
         if (dataSource === 'firestore') {
             dbService.updateProjectRows(projectId, enrichedUpdates).catch(() => { })
         }
-    }, [dataSource, projects, user, role, updateProject])
+    }, [dataSource, projects, projectPages, user, role, updateProject])
 
     // Add rows to a project
     const addProjectRows = useCallback(async (projectId, newRows) => {
@@ -807,8 +814,14 @@ export function useProjectData() {
         inProgress: projects.filter(p => p.status === 'in-progress').length,
         completed: projects.filter(p => p.status === 'completed').length,
         draft: projects.filter(p => p.status === 'draft').length,
-        totalRows: Object.values(projectRows).flat().length,
-        totalPendingReview: Object.values(projectRows).flat().filter(r => r.status === 'review').length,
+        totalRows: [
+            ...Object.values(projectRows).flat(),
+            ...Object.values(projectPages).flatMap(p => Object.values(p?.pageRows || {}).flat())
+        ].length,
+        totalPendingReview: [
+            ...Object.values(projectRows).flat(),
+            ...Object.values(projectPages).flatMap(p => Object.values(p?.pageRows || {}).flat())
+        ].filter(r => r.status === 'review').length,
     }
 
     return {
