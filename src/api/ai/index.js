@@ -2,12 +2,10 @@
  * AI Service Factory
  * Returns the configured AI Provider based on environment variables or explicit selection
  */
-import { GeminiProvider } from "./providers/gemini";
 import { ILMUchatProvider } from "./providers/ilmuchat";
 
 // Available providers registry
 const PROVIDERS = {
-    gemini: GeminiProvider,
     ilmuchat: ILMUchatProvider,
 };
 
@@ -25,7 +23,7 @@ export const AIService = (() => {
     const createInstance = (providerName) => {
         const Provider = PROVIDERS[providerName];
         if (!Provider) {
-            return new GeminiProvider();
+            return new ILMUchatProvider();
         }
         return new Provider();
     };
@@ -100,6 +98,5 @@ export const getAI = (providerName) => AIService.getInstance(providerName);
 
 // Export available providers list for UI
 export const AI_PROVIDERS = [
-    { id: 'gemini', label: 'Google Gemini', icon: '🧠' },
     { id: 'ilmuchat', label: 'ILMUchat (YTL)', icon: '💬' },
 ];

@@ -1,4 +1,4 @@
-// useTranslation - Hook for managing translation queue and Gemini API calls
+// useTranslation - Hook for managing translation queue and AI API calls
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 
@@ -7,7 +7,7 @@ const BATCH_SIZE = 10
 const THROTTLE_MS = 500
 
 /**
- * Manages translation queue, Gemini API calls, and retry logic
+ * Manages translation queue, AI API calls, and retry logic
  * @param {Function} updateRowsFn - Function to update rows after translation
  * @param {Function} fetchGlossaryFn - Function to fetch glossary terms
  * @returns Translation queue state and handlers
@@ -19,18 +19,18 @@ export function useTranslation(updateRowsFn, fetchGlossaryFn) {
     const processingRef = useRef(false)
     const isCancelledRef = useRef(false)
 
-    // Check if Gemini API is configured
+    // Check if AI API is configured
     const isApiConfigured = useCallback(() => {
-        return false // Gemini disabled for production
+        return !!import.meta.env.VITE_ILMUCHAT_API_KEY
     }, [])
 
-    // Perform translation using Gemini API
+    // Perform translation using AI API
     const performTranslation = useCallback(async (rows, template, targetLanguages = ['my', 'zh'], retryCount = 0) => {
         const MAX_RETRIES = 3
         const BASE_BACKOFF_MS = 5000
 
         if (!isApiConfigured()) {
-            toast.error("Gemini API Key is missing")
+            toast.error("AI API Key is missing")
             throw new Error("API_KEY_MISSING")
         }
 

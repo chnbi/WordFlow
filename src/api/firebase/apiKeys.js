@@ -12,7 +12,7 @@ let cachedUserId = null;
 /**
  * Get API keys for a user
  * @param {string} userId - Firebase Auth UID
- * @returns {Object} { gemini: string|null, ilmuchat: string|null }
+ * @returns {Object} { ilmuchat: string|null }
  */
 export async function getUserApiKeys(userId) {
     if (cachedUserId === userId && cachedKeys) {
@@ -29,18 +29,17 @@ export async function getUserApiKeys(userId) {
             return cachedKeys;
         }
 
-        return { gemini: null, ilmuchat: null };
+        return { ilmuchat: null };
     } catch (error) {
         console.error('Error fetching API keys:', error);
-        return { gemini: null, ilmuchat: null };
+        return { ilmuchat: null };
     }
 }
 
 /**
  * Save API keys for a user
  * @param {string} userId - Firebase Auth UID
- * @param {Object} keys - { gemini?: string, ilmuchat?: string }
- */
+ * @param {Object} keys - { ilmuchat?: string }
 export async function saveUserApiKeys(userId, keys) {
     try {
         const docRef = doc(db, 'users', userId, 'settings', 'apiKeys');
@@ -72,7 +71,7 @@ export async function saveUserApiKeys(userId, keys) {
  * Get the effective API key for a provider
  * Priority: User key (Firestore) > Environment variable
  * @param {string} userId - Optional user ID
- * @param {string} provider - 'gemini' or 'ilmuchat'
+ * @param {string} provider - 'ilmuchat'
  */
 export async function getEffectiveApiKey(userId, provider) {
     // First, try user-specific key
@@ -85,7 +84,6 @@ export async function getEffectiveApiKey(userId, provider) {
 
     // Fallback to environment variable
     const envKeys = {
-        gemini: null, // Removed for production
         ilmuchat: import.meta.env.VITE_ILMUCHAT_API_KEY
     };
 

@@ -23,7 +23,7 @@ export function ProjectProvider({ children }) {
         }
     }, [])
 
-    // Translation hook - handles queue and Gemini API
+    // Translation hook - handles queue and AI API
     const translation = useTranslation(data.updateProjectRows, fetchGlossaryTerms)
 
     // Selection hook - handles row checkboxes
