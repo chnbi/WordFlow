@@ -80,12 +80,17 @@ export function useProjectData() {
                                     for (const row of unpagedRows) {
                                         await dbService.addPageRows(project.id, page.id, [row])
                                     }
+                                    // Clean up legacy flat rows after successful migration
+                                    const flatRowIds = unpagedRows.map(r => r.id)
+                                    await dbService.deleteProjectRows(project.id, flatRowIds)
                                     pages = [page]
                                     pageRows[page.id] = unpagedRows
                                     // Update our local reference since they are now paged
                                     allProjectRows = unpagedRows // Content is same, just location changed
                                     // Migrated rows to Page 1
                                 } catch (migrationErr) {
+                                    console.error(`[Migration] Failed to migrate legacy rows for project ${project.id}:`, migrationErr)
+                                    toast.error('Failed to migrate legacy project data')
                                 }
                             } else {
                                 // Load page rows normally
