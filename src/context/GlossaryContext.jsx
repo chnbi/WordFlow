@@ -237,7 +237,7 @@ export function GlossaryProvider({ children }) {
             setTerms(prev => prev.map(t => t.id === id ? updatedTerm : t))
 
             // Audit log
-            await logAction(user, AUDIT_ACTIONS.GLOSSARY_APPROVED || 'GLOSSARY_APPROVED', 'glossary', id, {
+            await logAction(user, AUDIT_ACTIONS.GLOSSARY_APPROVED, 'glossary', id, {
                 content: { term: existingTerm.en }
             })
 

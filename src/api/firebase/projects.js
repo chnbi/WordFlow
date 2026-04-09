@@ -139,20 +139,12 @@ export async function deleteProject(projectId) {
             await addToBatch(rowDoc.ref);
         }
 
-        // 4. Cascade delete associated Audit Logs
-        // An audit log might reference the project via projectId or entityId
-        const auditRef = collection(db, 'audit_logs');
-        const auditByProjectId = await getDocs(query(auditRef, where('projectId', '==', projectId)));
-        const auditByEntityId = await getDocs(query(auditRef, where('entityId', '==', projectId)));
-
-        const auditLogRefs = new Map();
-        [...auditByProjectId.docs, ...auditByEntityId.docs].forEach(doc => {
-            auditLogRefs.set(doc.id, doc.ref);
-        });
-
-        for (const ref of auditLogRefs.values()) {
-            await addToBatch(ref);
-        }
+        // Note: Audit logs are intentionally NOT deleted here.
+        // firestore.rules enforces `allow delete: if false` on audit_logs,
+        // so attempting to batch-delete them would crash the entire operation.
+        // Orphaned audit logs for deleted projects remain in Firestore but
+        // are harmless — they contain no PII beyond what was already logged,
+        // and can be cleaned up later via an admin script if needed.
 
         // 5. Delete the project document itself
         await addToBatch(doc(db, COLLECTION, projectId));

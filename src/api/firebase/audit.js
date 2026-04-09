@@ -17,6 +17,7 @@ export const AUDIT_ACTIONS = {
     TRANSLATED_AI: 'TRANSLATED_AI',
     TRANSLATED_MANUAL: 'TRANSLATED_MANUAL',
     EDITED: 'EDITED',
+    ROW_REMARK_EDITED: 'ROW_REMARK_EDITED',
 
     // Workflow
     SENT_FOR_REVIEW: 'SENT_FOR_REVIEW',
@@ -30,11 +31,13 @@ export const AUDIT_ACTIONS = {
     PAGE_DELETED: 'PAGE_DELETED',
     ROWS_IMPORTED: 'ROWS_IMPORTED',
     ROWS_EXPORTED: 'ROWS_EXPORTED',
+    ROWS_DELETED: 'ROWS_DELETED',
 
     // Glossary
     GLOSSARY_ADDED: 'GLOSSARY_ADDED',
     GLOSSARY_EDITED: 'GLOSSARY_EDITED',
     GLOSSARY_DELETED: 'GLOSSARY_DELETED',
+    GLOSSARY_APPROVED: 'GLOSSARY_APPROVED',
 
     // Prompts
     PROMPT_CREATED: 'PROMPT_CREATED',
@@ -65,6 +68,7 @@ export async function logAction(user, action, entityType, entityId, options = {}
         });
         return docRef.id;
     } catch (error) {
+        console.error('[AuditLog] Failed to write audit log:', error, { action, entityType, entityId });
         return null;
     }
 }
@@ -91,6 +95,7 @@ export async function getAllAuditLogs(filters = {}, maxResults = 100) {
             timestamp: doc.data().createdAt?.toDate() || new Date()
         }));
     } catch (error) {
+        console.error('[AuditLog] Failed to fetch audit logs:', error, filters);
         return [];
     }
 }
@@ -100,6 +105,7 @@ export function formatAction(action) {
         TRANSLATED_AI: 'AI translated',
         TRANSLATED_MANUAL: 'Manually translated',
         EDITED: 'Edited',
+        ROW_REMARK_EDITED: 'Updated remark',
         SENT_FOR_REVIEW: 'Sent for review',
         APPROVED: 'Approved',
         REJECTED: 'Rejected',
@@ -109,9 +115,11 @@ export function formatAction(action) {
         PAGE_DELETED: 'Deleted page',
         ROWS_IMPORTED: 'Imported rows',
         ROWS_EXPORTED: 'Exported rows',
+        ROWS_DELETED: 'Deleted rows',
         GLOSSARY_ADDED: 'Added term',
         GLOSSARY_EDITED: 'Edited term',
         GLOSSARY_DELETED: 'Deleted term',
+        GLOSSARY_APPROVED: 'Approved term',
         PROMPT_CREATED: 'Created prompt',
         PROMPT_EDITED: 'Edited prompt',
         PROMPT_PUBLISHED: 'Published prompt',

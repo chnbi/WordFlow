@@ -511,7 +511,7 @@ export default function ProjectView({ projectId }) {
         // Handle Delete
         try {
             const idsToDelete = deleteConfirm.type === 'single' ? [deleteConfirm.id] : Array.from(selectedRowIds)
-            await deleteRows(id, idsToDelete)
+            await deleteRows(id, idsToDelete, currentPageId)
 
             if (deleteConfirm.type === 'bulk') {
                 deselectAllRows(id)
@@ -634,7 +634,7 @@ export default function ProjectView({ projectId }) {
 
             // Log Audit Action
             if (user) {
-                await logAction(user, 'ROW_REMARK_EDITED', 'row', remarkDialog.row.id, {
+                await logAction(user, AUDIT_ACTIONS.ROW_REMARK_EDITED, 'row', remarkDialog.row.id, {
                     projectId: id,
                     content: `Updated remark for row in ${currentTitle}`,
                     oldRemark: remarkDialog.row.remarks || '',

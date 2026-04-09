@@ -549,7 +549,7 @@ export function useProjectData() {
 
                 // Audit log
                 if (user) {
-                    await logAction(user, AUDIT_ACTIONS.ROWS_EXPORTED, 'project_rows', currentPageId || projectId, {
+                    await logAction(user, AUDIT_ACTIONS.ROWS_DELETED, 'project_rows', currentPageId || projectId, {
                         projectId,
                         content: `Deleted ${rowIds.length} row(s)`
                     })
