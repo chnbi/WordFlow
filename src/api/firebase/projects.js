@@ -313,10 +313,12 @@ export async function updatePageRow(projectId, pageId, rowId, updates) {
 
 export async function getProjectRows(projectId) {
     try {
-        // Legacy rows have empty pageId or missing pageId
+        // Fetch ALL rows in the flat /projects/{id}/rows collection.
+        // These are legacy rows that need migration to /projects/{id}/pages/{pageId}/rows.
+        // Some may already have a pageId set from a partial migration but were never
+        // physically moved to the nested subcollection.
         const q = query(
             collection(db, COLLECTION, projectId, 'rows'),
-            where('pageId', '==', ''),
             orderBy('order', 'asc')
         );
         const snapshot = await getDocs(q);
