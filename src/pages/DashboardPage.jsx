@@ -1,6 +1,7 @@
 import { useState, useRef } from "react"
 import { Folder, MoreHorizontal, Plus, Upload } from "lucide-react"
 import { PageContainer } from "@/components/ui/shared"
+
 import NewProjectForm from "@/components/NewProjectForm"
 import { useProjects } from "@/context/ProjectContext"
 import { useAuth } from "@/context/DevAuthContext"
@@ -190,6 +191,7 @@ export default function Dashboard() {
                     )}
                 </div>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {[
                     { label: 'Total projects', count: totalProjects },

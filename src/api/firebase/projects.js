@@ -262,11 +262,13 @@ export async function addPageRows(projectId, pageId, rows) {
             const chunkResults = [];
 
             chunk.forEach((row, index) => {
-                const rowRef = pageId
-                    ? doc(collection(db, COLLECTION, projectId, 'pages', pageId, 'rows'))
-                    : doc(collection(db, COLLECTION, projectId, 'rows'));
-                // Destructure out the client-side temp `id` to avoid it overwriting the Firestore-generated ID
                 const { id: _tempId, ...rowWithoutId } = row;
+                
+                // If the row explicitly comes with an ID (from legacy migration), reuse it to prevent duplicates
+                const rowRef = pageId
+                    ? (_tempId ? doc(db, COLLECTION, projectId, 'pages', pageId, 'rows', _tempId) : doc(collection(db, COLLECTION, projectId, 'pages', pageId, 'rows')))
+                    : (_tempId ? doc(db, COLLECTION, projectId, 'rows', _tempId) : doc(collection(db, COLLECTION, projectId, 'rows')));
+                
                 const rowData = {
                     ...rowWithoutId,
                     project: projectId,

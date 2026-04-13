@@ -1,5 +1,5 @@
 // useProjectData - Hook for managing project data with Firebase
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import * as dbService from '@/api/firebase'
 import { logAction, AUDIT_ACTIONS } from '@/api/firebase'
 import { toast } from 'sonner'
@@ -23,6 +23,7 @@ export function useProjectData() {
         if (project?.ownerId === (user?.id || user?.uid)) return true
         return false
     }
+
     const [projects, setProjects] = useState([])
     const [projectRows, setProjectRows] = useState({})  // { projectId: rows[] }
     const [projectPages, setProjectPages] = useState({}) // { projectId: { pages: [], pageRows: { pageId: rows[] } } }
@@ -71,64 +72,11 @@ export function useProjectData() {
                             let pageRows = {}
                             let allProjectRows = [...(unpagedRows || [])]
 
-                            // Auto-migrate legacy projects: move flat rows into nested page structure
-                            if (unpagedRows && unpagedRows.length > 0) {
-                                // There are rows stuck in the flat /projects/{id}/rows collection
-                                // They need to be moved to /projects/{id}/pages/{pageId}/rows
-                                try {
-                                    let targetPage
-                                    if (pages.length === 0) {
-                                        // Case 1: No pages exist yet — create Page 1
-                                        targetPage = await dbService.addProjectPage(project.id, { name: 'Page 1' })
-                                        pages = [targetPage]
-                                    } else {
-                                        // Case 2: Pages already exist (partial migration) — use first page
-                                        targetPage = pages[0]
-                                    }
-
-                                    // Check what already exists in the target page to avoid duplicates
-                                    const existingPageRows = await dbService.getPageRows(project.id, targetPage.id)
-                                    const existingSourceTexts = new Set(existingPageRows.map(r => r.source_text))
-
-                                    // Only migrate rows that don't already exist in the target page
-                                    const rowsToMigrate = unpagedRows.filter(r => !existingSourceTexts.has(r.source_text))
-
-                                    if (rowsToMigrate.length > 0) {
-                                        for (const row of rowsToMigrate) {
-                                            await dbService.addPageRows(project.id, targetPage.id, [row])
-                                        }
-                                    }
-
-                                    // Clean up ALL legacy flat rows after successful migration
-                                    const flatRowIds = unpagedRows.map(r => r.id)
-                                    await dbService.deleteProjectRows(project.id, flatRowIds)
-
-                                    // Reload page rows after migration
-                                    const migratedRows = await dbService.getPageRows(project.id, targetPage.id)
-                                    pageRows[targetPage.id] = migratedRows || []
-                                    allProjectRows = [...migratedRows]
-
-                                    // Load any other pages too
-                                    for (const page of pages) {
-                                        if (page.id !== targetPage.id) {
-                                            const pRows = await dbService.getPageRows(project.id, page.id)
-                                            pageRows[page.id] = pRows || []
-                                            allProjectRows = [...allProjectRows, ...pRows]
-                                        }
-                                    }
-
-                                    console.log(`[Migration] Migrated ${rowsToMigrate.length} rows for project ${project.id} (${unpagedRows.length} flat rows cleaned up)`)
-                                } catch (migrationErr) {
-                                    console.error(`[Migration] Failed to migrate legacy rows for project ${project.id}:`, migrationErr)
-                                    toast.error('Failed to migrate legacy project data')
-                                }
-                            } else {
-                                // No flat rows — load page rows normally
-                                for (const page of pages) {
-                                    const pRows = await dbService.getPageRows(project.id, page.id)
-                                    pageRows[page.id] = pRows || []
-                                    allProjectRows = [...allProjectRows, ...pRows]
-                                }
+                            // Load nested page rows
+                            for (const page of pages) {
+                                const pRows = await dbService.getPageRows(project.id, page.id)
+                                pageRows[page.id] = pRows || []
+                                allProjectRows = [...allProjectRows, ...pRows]
                             }
 
                             // Calculate Progress based on ALL rows (paged + unpaged)
