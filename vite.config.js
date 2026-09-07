@@ -2,9 +2,34 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+
+function readGit(...args) {
+    try {
+        return execFileSync('git', args, {
+            cwd: __dirname,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: 2000,
+            windowsHide: true,
+        }).trim()
+    } catch {
+        return ''
+    }
+}
+
+// Only publish build identifiers, never the full environment or credentials.
+const buildInfo = {
+    version: JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version,
+    commit: process.env.VERCEL_GIT_COMMIT_SHA || readGit('rev-parse', 'HEAD'),
+}
 
 export default defineConfig({
     base: '/wordflow/',
+    define: {
+        'import.meta.env.VITE_BUILD_INFO': JSON.stringify(buildInfo),
+    },
     plugins: [
         react(),
         nodePolyfills({

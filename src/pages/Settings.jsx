@@ -16,6 +16,8 @@ import AuditLogsSection from "@/components/AuditLogsSection"
 import { PageContainer } from "@/components/ui/shared"
 import { PageHeader } from "@/components/ui/common"
 
+const buildInfo = import.meta.env.VITE_BUILD_INFO
+
 const adminSections = [
     {
         id: 'users',
@@ -303,6 +305,14 @@ export default function Settings() {
             {canDo('manage_users') && (
                 <AuditLogsSection />
             )}
+
+            <footer id="deployment-info" className="pt-6 text-center text-xs text-muted-foreground">
+                v{buildInfo.version}
+                <span className="mx-2" aria-hidden="true">/</span>
+                <span className="font-mono" title={buildInfo.commit || 'Commit unavailable'}>
+                    {buildInfo.commit ? buildInfo.commit.slice(0, 7) : 'unknown'}
+                </span>
+            </footer>
 
             <ManageCategoriesDialog open={isCategoryOpen} onOpenChange={setIsCategoryOpen} />
             <ChangePasswordDialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen} />
