@@ -6,7 +6,7 @@ exports.ilmuChatProxy = functions.https.onRequest((req, res) => {
     cors(req, res, async () => {
         try {
             // Target API base URL
-            const targetBase = "https://api.ytlailabs.tech";
+            const targetBase = "https://api.ilmu.ai";
 
             // Strip the proxy prefix from the request URL
             // Incoming: /proxy/ilmuchat/v1/chat/completions
@@ -23,7 +23,7 @@ exports.ilmuChatProxy = functions.https.onRequest((req, res) => {
                 url: targetUrl,
                 headers: {
                     ...req.headers,
-                    host: "api.ytlailabs.tech", // Override host header
+                    host: "api.ilmu.ai", // Override host header
                 },
                 data: req.body,
                 params: req.query,

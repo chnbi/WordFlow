@@ -18,7 +18,7 @@ export class ILMUchatProvider extends BaseAIProvider {
         this.apiKey = config.apiKey || import.meta.env.VITE_ILMUCHAT_API_KEY;
 
         // Get target URL from env or default
-        const targetUrl = config.endpoint || import.meta.env.VITE_ILMUCHAT_ENDPOINT || 'https://api.ytlailabs.tech/preview/v1/chat/completions';
+        const targetUrl = config.endpoint || import.meta.env.VITE_ILMUCHAT_ENDPOINT || 'https://api.ilmu.ai/v1/chat/completions';
 
         try {
             const urlObj = new URL(targetUrl);
@@ -28,7 +28,7 @@ export class ILMUchatProvider extends BaseAIProvider {
             this.endpoint = targetUrl.startsWith('/') ? targetUrl : `/proxy/ilmuchat/v1/chat/completions`;
         }
 
-        this.model = config.model || import.meta.env.VITE_ILMUCHAT_MODEL || 'ilmu-preview';
+        this.model = config.model || import.meta.env.VITE_ILMUCHAT_MODEL || 'ilmu-nemo-nano';
     }
 
     /**

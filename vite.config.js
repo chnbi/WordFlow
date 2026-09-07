@@ -44,7 +44,7 @@ export default defineConfig({
     server: {
         proxy: {
             '/proxy/ilmuchat': {
-                target: 'https://api.ytlailabs.tech',
+                target: 'https://api.ilmu.ai',
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/proxy\/ilmuchat/, '')
             }
